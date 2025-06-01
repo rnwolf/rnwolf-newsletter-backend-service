@@ -1,0 +1,69 @@
+{
+  "name": "rnwolf-newsletter-backend-service",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  "env": {
+    "local": {
+      "name": "rnwolf-newsletter-backend-local",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "rnwolf-newsletter-db-local",
+          "database_id": "local-db-id"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "local",
+        "API_VERSION": "v1"
+      }
+    },
+
+    "staging": {
+      "name": "rnwolf-newsletter-backend-staging",
+      "routes": [
+        {
+          "pattern": "api-staging.rnwolf.net/v1/*",
+          "zone_name": "rnwolf.net"
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "rnwolf-newsletter-db-staging",
+          "database_id": "staging-db-id-replace-me"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "API_VERSION": "v1"
+      }
+    },
+
+    "production": {
+      "name": "rnwolf-newsletter-backend-production",
+      "routes": [
+        {
+          "pattern": "api.rnwolf.net/v1/*",
+          "zone_name": "rnwolf.net"
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "rnwolf-newsletter-db-production",
+          "database_id": "production-db-id-replace-me"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "production",
+        "API_VERSION": "v1"
+      }
+    }
+  }
+}

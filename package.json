@@ -1,0 +1,38 @@
+{
+  "name": "rnwolf-newsletter-backend-service",
+  "version": "1.0.0",
+  "description": "API backend service for newsletter subscription management",
+  "main": "src/index.ts",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "dev:remote": "wrangler dev --remote",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration:staging": "ENVIRONMENT=staging vitest run tests/integration",
+    "test:smoke:production": "ENVIRONMENT=production vitest run tests/smoke",
+    "db:migrate:local": "wrangler d1 execute newsletter-db-local --file=./migrations/001_initial_schema.sql",
+    "db:migrate:staging": "wrangler d1 execute newsletter-db-staging --file=./migrations/001_initial_schema.sql",
+    "db:migrate:production": "wrangler d1 execute newsletter-db-production --file=./migrations/001_initial_schema.sql",
+    "type-check": "tsc --noEmit",
+    "lint": "echo 'Add linting when ready'"
+  },
+  "keywords": ["cloudflare-workers", "newsletter", "api", "d1", "turnstile"],
+  "author": "Rudiger Wolf",
+  "license": "MIT",
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20250531.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.34",
+    "@types/node": "^22.15.29",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4",
+    "wrangler": "^4.18.0"
+  }
+}

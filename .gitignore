@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.npm
+.pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Build outputs
+dist/
+.wrangler/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Python (for newsletter scripts)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+
+# Newsletter data
+subscribers.csv
+newsletter.log
