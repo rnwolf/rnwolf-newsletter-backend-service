@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
+import { setupTestDatabase } from './setup';
 import worker from '../src/index';
+
+describe('Email Validation', () => {
+  beforeEach(async () => {
+    await setupTestDatabase(env);
+  });
 
 describe('Email Validation', () => {
   beforeEach(async () => {

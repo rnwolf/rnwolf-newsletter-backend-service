@@ -8,17 +8,17 @@
     "test": "tests"
   },
   "scripts": {
-    "dev": "wrangler dev --local",
-    "dev:remote": "wrangler dev --remote",
+    "dev": "wrangler dev --env local",
+    "dev:remote": "wrangler dev --env local --remote",
     "deploy:staging": "wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration:staging": "ENVIRONMENT=staging vitest run tests/integration",
     "test:smoke:production": "ENVIRONMENT=production vitest run tests/smoke",
-    "db:migrate:local": "wrangler d1 execute newsletter-db-local --file=./migrations/001_initial_schema.sql",
-    "db:migrate:staging": "wrangler d1 execute newsletter-db-staging --file=./migrations/001_initial_schema.sql",
-    "db:migrate:production": "wrangler d1 execute newsletter-db-production --file=./migrations/001_initial_schema.sql",
+    "db:migrate:local": "wrangler d1 execute DB --env local --file=./migrations/001_initial_schema.sql",
+    "db:migrate:staging": "wrangler d1 execute DB --env staging --file=./migrations/001_initial_schema.sql",
+    "db:migrate:production": "wrangler d1 execute DB --env production --file=./migrations/001_initial_schema.sql",
     "type-check": "tsc --noEmit",
     "lint": "echo 'Add linting when ready'"
   },

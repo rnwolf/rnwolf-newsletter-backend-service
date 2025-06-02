@@ -1,8 +1,9 @@
 {
-  "name": "rnwolf-newsletter-backend-service",
+  "name": "newsletter-backend-service",
   "main": "src/index.ts",
   "compatibility_date": "2025-03-07",
   "compatibility_flags": ["nodejs_compat"],
+
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
@@ -10,12 +11,12 @@
 
   "env": {
     "local": {
-      "name": "rnwolf-newsletter-backend-local",
+      "name": "newsletter-backend-local",
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "rnwolf-newsletter-db-local",
-          "database_id": "local-db-id"
+          "database_id": "a72d5490-a744-4b55-bd51-4edfe56ff288"
         }
       ],
       "vars": {
@@ -25,11 +26,11 @@
     },
 
     "staging": {
-      "name": "rnwolf-newsletter-backend-staging",
+      "name": "newsletter-backend-staging",
       "routes": [
         {
-          "pattern": "api-staging.rnwolf.net/v1/*",
-          "zone_name": "rnwolf.net"
+          "pattern": "api-staging.yourdomain.com/v1/*",
+          "zone_name": "yourdomain.com"
         }
       ],
       "d1_databases": [
@@ -46,11 +47,11 @@
     },
 
     "production": {
-      "name": "rnwolf-newsletter-backend-production",
+      "name": "newsletter-backend-production",
       "routes": [
         {
-          "pattern": "api.rnwolf.net/v1/*",
-          "zone_name": "rnwolf.net"
+          "pattern": "api.yourdomain.com/v1/*",
+          "zone_name": "yourdomain.com"
         }
       ],
       "d1_databases": [

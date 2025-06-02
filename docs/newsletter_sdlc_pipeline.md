@@ -46,10 +46,10 @@ localhost:8787    api-staging    api.yourdomain.com
    ```bash
    # Write tests first
    npm run test:watch
-   
+
    # Run local development server
    npx wrangler dev --local
-   
+
    # Test endpoints locally
    curl -X POST http://localhost:8787/v1/newsletter/subscribe \
      -H "Content-Type: application/json" \
@@ -69,8 +69,8 @@ localhost:8787    api-staging    api.yourdomain.com
 npm install
 
 # Setup local D1 database
-npx wrangler d1 create newsletter-db-local
-npx wrangler d1 execute newsletter-db-local --file=./schema.sql
+npx wrangler d1 create rnwolf-newsletter-db-local
+npx wrangler d1 execute rnwolf-newsletter-db-local --file=./schema.sql
 
 # Start local development
 npx wrangler dev --local --persist-to=./local-storage
@@ -137,7 +137,7 @@ npm run test:smoke:production
 
 **v1 (Current Production)**:
 - **Status**: ✅ Active & Stable
-- **Endpoints**: 
+- **Endpoints**:
   - `POST /v1/newsletter/subscribe`
   - `GET /v1/newsletter/unsubscribe`
 - **Clients**: www.rnwolf.net frontend
@@ -314,7 +314,7 @@ CREATE TABLE version_sync_log (
 EOF
 
 # Apply migration locally
-npx wrangler d1 execute newsletter-db-local --file=./migrations/002_add_v2_fields.sql
+npx wrangler d1 execute rnwolf-newsletter-db-local --file=./migrations/002_add_v2_fields.sql
 
 # Test both v1 and v2 APIs against new schema
 npm run test:v1:local
@@ -397,7 +397,7 @@ class SubscriberService {
     return await this.db.prepare(`
       INSERT INTO subscribers (email, subscribed_at, ip_address, user_agent, country, city)
       VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(email) DO UPDATE SET 
+      ON CONFLICT(email) DO UPDATE SET
         subscribed_at = ?,
         unsubscribed_at = NULL,
         updated_at = CURRENT_TIMESTAMP
@@ -409,7 +409,7 @@ class SubscriberService {
     return await this.db.prepare(`
       INSERT INTO subscribers (email, subscribed_at, subscription_preferences, email_verified, ip_address, user_agent, country, city)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(email) DO UPDATE SET 
+      ON CONFLICT(email) DO UPDATE SET
         subscribed_at = ?,
         subscription_preferences = ?,
         email_verified = ?,
@@ -430,12 +430,12 @@ class CrossVersionSyncService {
   async syncSubscriptionChange(email: string, action: 'subscribe' | 'unsubscribe', sourceVersion: 'v1' | 'v2', data: any) {
     // Log the change for audit trail
     await this.logVersionSync(email, action, sourceVersion, data);
-    
+
     if (sourceVersion === 'v1') {
       // Sync v1 change to v2 database
       await this.syncV1ToV2(email, action, data);
     } else {
-      // Sync v2 change to v1 database  
+      // Sync v2 change to v1 database
       await this.syncV2ToV1(email, action, data);
     }
   }
@@ -446,7 +446,7 @@ class CrossVersionSyncService {
         await this.v2DB.prepare(`
           INSERT INTO subscribers_v2 (email, subscribed_at, unsubscribed_at, ip_address, user_agent, country, city, migrated_from_v1)
           VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
-          ON CONFLICT(email) DO UPDATE SET 
+          ON CONFLICT(email) DO UPDATE SET
             subscribed_at = ?,
             unsubscribed_at = NULL,
             updated_at = CURRENT_TIMESTAMP
@@ -456,7 +456,7 @@ class CrossVersionSyncService {
           UPDATE subscribers_v2 SET unsubscribed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?
         `).bind(v1Data.unsubscribed_at, email).run();
       }
-      
+
       // Mark sync as completed
       await this.updateSyncStatus(email, 'synced');
     } catch (error) {
@@ -482,7 +482,7 @@ class CrossVersionSyncService {
         await this.v1DB.prepare(`
           INSERT INTO subscribers (email, subscribed_at, unsubscribed_at, ip_address, user_agent, country, city)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(email) DO UPDATE SET 
+          ON CONFLICT(email) DO UPDATE SET
             subscribed_at = ?,
             unsubscribed_at = NULL,
             updated_at = CURRENT_TIMESTAMP
@@ -516,7 +516,7 @@ class CrossVersionSyncService {
 - Temporary inconsistency acceptable
 - Background sync processes ensure convergence
 
-#### 2. Strong Consistency Model  
+#### 2. Strong Consistency Model
 - All changes must be atomic across versions
 - Higher latency but guaranteed consistency
 - Use database transactions spanning multiple schemas
@@ -530,7 +530,7 @@ class ConflictResolver {
 
     // Resolution strategy: Last-write-wins based on updated_at
     const mostRecent = v1Record.updated_at > v2Record.updated_at ? v1Record : v2Record;
-    
+
     // Sync the most recent state to both versions
     await this.syncToAllVersions(email, mostRecent);
   }
@@ -553,7 +553,7 @@ npm run verify:production:data
 
 #### Safe Rollback Principles
 1. **Never drop columns** used by any active API version
-2. **Maintain backward compatibility** in all schema changes  
+2. **Maintain backward compatibility** in all schema changes
 3. **Test rollback procedures** in staging environment
 4. **Keep recent backups** before any schema migration
 
@@ -600,7 +600,7 @@ npm run verify:production:data
   "main": "src/index.ts",
   "compatibility_date": "2025-03-07",
   "compatibility_flags": ["nodejs_compat"],
-  
+
   "env": {
     "staging": {
       "name": "newsletter-api-staging",
@@ -616,7 +616,7 @@ npm run verify:production:data
         "API_VERSION": "v1"
       }
     },
-    
+
     "production": {
       "name": "newsletter-api-production",
       "routes": [

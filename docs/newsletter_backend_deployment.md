@@ -112,9 +112,9 @@ npm install -D \
     "test:watch": "vitest",
     "test:integration:staging": "ENVIRONMENT=staging vitest run tests/integration",
     "test:smoke:production": "ENVIRONMENT=production vitest run tests/smoke",
-    "db:migrate:local": "wrangler d1 execute newsletter-db-local --file=./migrations/001_initial_schema.sql",
-    "db:migrate:staging": "wrangler d1 execute newsletter-db-staging --file=./migrations/001_initial_schema.sql",
-    "db:migrate:production": "wrangler d1 execute newsletter-db-production --file=./migrations/001_initial_schema.sql",
+    "db:migrate:local": "wrangler d1 execute rnwolf-newsletter-db-local --file=./migrations/001_initial_schema.sql",
+    "db:migrate:staging": "wrangler d1 execute rnwolf-newsletter-db-staging --file=./migrations/001_initial_schema.sql",
+    "db:migrate:production": "wrangler d1 execute rnwolf-newsletter-db-production --file=./migrations/001_initial_schema.sql",
     "type-check": "tsc --noEmit",
     "lint": "echo 'Add linting when ready'"
   },
@@ -135,14 +135,14 @@ npm install -D \
     "enabled": true,
     "head_sampling_rate": 1
   },
-  
+
   "env": {
     "local": {
       "name": "newsletter-backend-local",
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "newsletter-db-local",
+          "database_name": "rnwolf-newsletter-db-local",
           "database_id": "local-db-id"
         }
       ],
@@ -151,9 +151,9 @@ npm install -D \
         "API_VERSION": "v1"
       }
     },
-    
+
     "staging": {
-      "name": "newsletter-backend-staging",
+      "name": "rnwolf-newsletter-backend-staging",
       "routes": [
         {
           "pattern": "api-staging.yourdomain.com/v1/*",
@@ -163,7 +163,7 @@ npm install -D \
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "newsletter-db-staging",
+          "database_name": "rnwolf-newsletter-db-staging",
           "database_id": "staging-db-id-replace-me"
         }
       ],
@@ -172,9 +172,9 @@ npm install -D \
         "API_VERSION": "v1"
       }
     },
-    
+
     "production": {
-      "name": "newsletter-backend-production",
+      "name": "rnwolf-newsletter-backend-production",
       "routes": [
         {
           "pattern": "api.yourdomain.com/v1/*",
@@ -184,7 +184,7 @@ npm install -D \
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "newsletter-db-production",
+          "database_name": "rnwolf-newsletter-db-production",
           "database_id": "production-db-id-replace-me"
         }
       ],
@@ -369,26 +369,26 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-        
+
     - name: Install dependencies
       run: npm ci
-      
+
     - name: Type check
       run: npm run type-check
-      
+
     - name: Run tests
       run: npm test
-      
+
     - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
@@ -409,31 +409,31 @@ on:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
-    
+
   deploy-staging:
     needs: test
     runs-on: ubuntu-latest
     environment: staging
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-        
+
     - name: Install dependencies
       run: npm ci
-      
+
     - name: Deploy to staging
       run: npm run deploy:staging
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        
+
     - name: Run integration tests
       run: npm run test:integration:staging
       env:
@@ -452,36 +452,36 @@ on:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
-    
+
   deploy-staging:
     needs: test
     uses: ./.github/workflows/deploy-staging.yml
     secrets: inherit
-    
+
   deploy-production:
     needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-        
+
     - name: Install dependencies
       run: npm ci
-      
+
     - name: Deploy to production
       run: npm run deploy:production
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        
+
     - name: Run smoke tests
       run: npm run test:smoke:production
       env:
@@ -494,7 +494,7 @@ jobs:
 
 ```bash
 # 1. Create local D1 database
-npx wrangler d1 create newsletter-db-local
+npx wrangler d1 create rnwolf-newsletter-db-local
 
 # 2. Update wrangler.jsonc with the database ID
 # Copy the database ID from the command output
@@ -579,7 +579,7 @@ Configure DNS records for your API subdomains:
 # Staging
 api-staging.yourdomain.com CNAME yourworkername.yourdomain.workers.dev
 
-# Production  
+# Production
 api.yourdomain.com CNAME yourworkername.yourdomain.workers.dev
 ```
 
@@ -657,7 +657,7 @@ npm run deploy:production
 The project uses Test-Driven Development with comprehensive test coverage:
 
 - **Email Validation Tests**
-- **Turnstile Verification Tests**  
+- **Turnstile Verification Tests**
 - **Database Operations Tests**
 - **HTTP Handling Tests**
 - **Integration Tests**
