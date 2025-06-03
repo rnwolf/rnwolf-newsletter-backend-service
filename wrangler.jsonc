@@ -29,15 +29,15 @@
       "name": "newsletter-backend-staging",
       "routes": [
         {
-          "pattern": "api-staging.yourdomain.com/v1/*",
-          "zone_name": "yourdomain.com"
+          "pattern": "api-staging.rnwolf.net/*",
+          "zone_name": "rnwolf.net"
         }
       ],
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "rnwolf-newsletter-db-staging",
-          "database_id": "staging-db-id-replace-me"
+          "database_id": "149f8e5b-2fc1-41f0-8ed0-74b3d00e1da2"
         }
       ],
       "vars": {
@@ -50,8 +50,8 @@
       "name": "newsletter-backend-production",
       "routes": [
         {
-          "pattern": "api.yourdomain.com/v1/*",
-          "zone_name": "yourdomain.com"
+          "pattern": "api.yourdomain.com/*",
+          "zone_name": "rnwolf.net"
         }
       ],
       "d1_databases": [

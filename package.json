@@ -17,8 +17,8 @@
     "test:integration:staging": "ENVIRONMENT=staging vitest run tests/integration",
     "test:smoke:production": "ENVIRONMENT=production vitest run tests/smoke",
     "db:migrate:local": "wrangler d1 execute DB --env local --file=./migrations/001_initial_schema.sql",
-    "db:migrate:staging": "wrangler d1 execute DB --env staging --file=./migrations/001_initial_schema.sql",
-    "db:migrate:production": "wrangler d1 execute DB --env production --file=./migrations/001_initial_schema.sql",
+    "db:migrate:staging": "wrangler d1 execute DB --env staging --remote --file=./migrations/001_initial_schema.sql",
+    "db:migrate:production": "wrangler d1 execute DB --env production --remote --file=./migrations/001_initial_schema.sql",
     "type-check": "tsc --noEmit",
     "lint": "echo 'Add linting when ready'"
   },
