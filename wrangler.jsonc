@@ -50,7 +50,7 @@
       "name": "newsletter-backend-production",
       "routes": [
         {
-          "pattern": "api.yourdomain.com/*",
+          "pattern": "api.rnwolf.net/*",
           "zone_name": "rnwolf.net"
         }
       ],
@@ -58,7 +58,7 @@
         {
           "binding": "DB",
           "database_name": "rnwolf-newsletter-db-production",
-          "database_id": "production-db-id-replace-me"
+          "database_id": "43a9102f-d544-4fa9-9397-5c2bd127455b"
         }
       ],
       "vars": {

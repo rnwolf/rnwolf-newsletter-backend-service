@@ -12,13 +12,20 @@
     "dev:remote": "wrangler dev --env local --remote",
     "deploy:staging": "wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production",
-    "test": "vitest run",
-    "test:watch": "vitest",
+
+    "test": "vitest run tests/api.test.ts",
+    "test:watch": "vitest tests/api.test.ts",
+    "test:local": "TEST_ENV=local vitest run tests/api.test.ts",
+    "test:staging": "TEST_ENV=staging vitest run tests/api.test.ts",
+    "test:production": "TEST_ENV=production vitest run tests/api.test.ts",
+    "test:all-envs": "npm run test:local && npm run test:staging",
     "test:integration:staging": "ENVIRONMENT=staging vitest run tests/integration",
     "test:smoke:production": "ENVIRONMENT=production vitest run tests/smoke",
+
     "db:migrate:local": "wrangler d1 execute DB --env local --file=./migrations/001_initial_schema.sql",
     "db:migrate:staging": "wrangler d1 execute DB --env staging --remote --file=./migrations/001_initial_schema.sql",
     "db:migrate:production": "wrangler d1 execute DB --env production --remote --file=./migrations/001_initial_schema.sql",
+
     "type-check": "tsc --noEmit",
     "lint": "echo 'Add linting when ready'"
   },
