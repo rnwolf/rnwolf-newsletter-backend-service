@@ -25,6 +25,7 @@ const TEST_CONFIG = {
 // Get environment from ENV variable, default to local
 const TEST_ENV = (process.env.TEST_ENV || 'local') as keyof typeof TEST_CONFIG;
 const config = TEST_CONFIG[TEST_ENV];
+const ALLOWED_ORIGIN = 'https://www.rnwolf.net';
 
 // Helper function to make requests (either via worker.fetch or real HTTP)
 async function makeRequest(path: string, options?: RequestInit): Promise<Response> {
@@ -45,6 +46,138 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
     if (config.setupDatabase) {
       await setupTestDatabase(env);
     }
+  });
+
+  describe('CORS Configuration', () => {
+    it('should handle OPTIONS preflight requests correctly', async () => {
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': ALLOWED_ORIGIN,
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'Content-Type'
+        }
+      });
+
+      expect(response.status).toBe(200);
+
+      // Verify CORS headers
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type');
+      expect(response.headers.get('Access-Control-Max-Age')).toBe('86400');
+    });
+
+    it('should include CORS headers in successful POST responses', async () => {
+      const testEmail = TEST_ENV === 'local' ? 'cors-test@example.com' : `cors-test-${Date.now()}@example.com`;
+
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': ALLOWED_ORIGIN
+        },
+        body: JSON.stringify({ email: testEmail })
+      });
+
+      expect(response.status).toBe(200);
+
+      // Verify CORS headers are present in successful response
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+      expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type');
+    });
+
+    it('should include CORS headers in error responses', async () => {
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': ALLOWED_ORIGIN
+        },
+        body: JSON.stringify({ email: 'invalid-email' }) // Invalid email to trigger error
+      });
+
+      expect(response.status).toBe(400);
+
+      // Verify CORS headers are present even in error responses
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+      expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type');
+
+      const result = await response.json();
+      expect(result.success).toBe(false);
+    });
+
+    it('should include CORS headers in health check responses', async () => {
+      const response = await makeRequest('/health', {
+        headers: {
+          'Origin': ALLOWED_ORIGIN
+        }
+      });
+
+      expect(response.status).toBe(200);
+
+      // Verify CORS headers in health check
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+    });
+
+    it('should include CORS headers in 404 responses', async () => {
+      const response = await makeRequest('/nonexistent', {
+        headers: {
+          'Origin': ALLOWED_ORIGIN
+        }
+      });
+
+      expect(response.status).toBe(404);
+
+      // Verify CORS headers in 404 responses
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+    });
+
+    it('should include CORS headers in method not allowed responses', async () => {
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'GET', // Wrong method
+        headers: {
+          'Origin': ALLOWED_ORIGIN
+        }
+      });
+
+      expect(response.status).toBe(405);
+
+      // Verify CORS headers in method not allowed responses
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+    });
+
+    it('should handle multiple CORS preflight scenarios', async () => {
+      // Test preflight for health endpoint
+      const healthPreflight = await makeRequest('/health', {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': ALLOWED_ORIGIN,
+          'Access-Control-Request-Method': 'GET'
+        }
+      });
+
+      expect(healthPreflight.status).toBe(200);
+      expect(healthPreflight.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+
+      // Test preflight for subscription endpoint
+      const subscribePreflight = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': ALLOWED_ORIGIN,
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'Content-Type'
+        }
+      });
+
+      expect(subscribePreflight.status).toBe(200);
+      expect(subscribePreflight.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+    });
   });
 
   describe('Health Check', () => {
@@ -209,6 +342,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       const result = await response.json();
       expect(response.status).toBe(500);
       expect(result.success).toBe(false);
+      expect(result.message).toContain('An error occurred while processing');
     });
   });
 });
