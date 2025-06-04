@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { env } from 'cloudflare:test';
 import { setupTestDatabase } from './setup';
 import worker from '../src/index';
@@ -345,4 +345,112 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       expect(result.message).toContain('An error occurred while processing');
     });
   });
+
+  describe('Error Response Handling', () => {
+    it('should return proper error structure for invalid email', async () => {
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'invalid-email' })
+      });
+
+      const result = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('Invalid email address')
+      });
+      expect(result).not.toHaveProperty('debug'); // No debug info in production
+    });
+
+    it('should return proper error structure for missing email', async () => {
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}) // No email field
+      });
+
+      const result = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('Email address is required')
+      });
+    });
+
+    it('should return troubleshooting URL for Turnstile failures', async () => {
+      // Mock Turnstile failure
+      if (TEST_ENV === 'local') {
+        global.fetch = vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ success: false }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        );
+      }
+
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'test@example.com',
+          turnstileToken: 'invalid-token'
+        })
+      });
+
+      const result = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('Please complete the security verification'),
+        troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
+      });
+    });
+
+    it('should include debug info only in staging environment', async () => {
+      // This test would need to be run specifically in staging
+      if (TEST_ENV === 'staging') {
+        // Force an error by sending malformed request
+        const response = await makeRequest('/v1/newsletter/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{ "email": "test@example.com", invalid }' // Malformed JSON
+        });
+
+        const result = await response.json();
+
+        expect(response.status).toBe(500);
+        expect(result).toHaveProperty('debug'); // Debug info should be present in staging
+      }
+    });
+
+    it('should handle network timeouts gracefully', async () => {
+      if (TEST_ENV === 'local') {
+        // Mock a network timeout for Turnstile verification
+        global.fetch = vi.fn().mockRejectedValue(new Error('Network timeout'));
+
+        const response = await makeRequest('/v1/newsletter/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'test@example.com',
+            turnstileToken: 'valid-token'
+          })
+        });
+
+        const result = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(result).toMatchObject({
+          success: false,
+          message: expect.stringContaining('Please complete the security verification'), // Updated message
+          troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
+        });
+      }
+    });
+  });
+
 });

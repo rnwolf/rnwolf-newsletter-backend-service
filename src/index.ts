@@ -122,6 +122,27 @@ async function handleSubscription(request: Request, env: Env): Promise<Response>
       name: error.name
     });
 
+    // Check for database-specific errors
+    if (error.message?.includes('Database unavailable') ||
+        error.message?.includes('D1_ERROR') ||
+        error.message?.includes('database') ||
+        error.name === 'DatabaseError') {
+      return createCORSResponse({
+        success: false,
+        message: 'Our subscription service is temporarily unavailable for maintenance. Please try again later.'
+      }, 503); // Service Unavailable
+    }
+
+    // Handle Turnstile verification errors specifically
+    if (error.message?.includes('Turnstile') || error.message?.includes('verification')) {
+      return createCORSResponse({
+        success: false,
+        message: 'Please complete the security verification. If you\'re having trouble, visit our troubleshooting guide for help.',
+        troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
+      }, 400);
+    }
+
+    // Generic error for all other cases
     return createCORSResponse({
       success: false,
       message: 'An error occurred while processing your subscription. Please try again.',
