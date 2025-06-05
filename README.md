@@ -41,8 +41,15 @@ The above documents are then used as context to create a detailed task list with
 | Document Name                     | Purpose                                                       |
 |-----------------------------------|---------------------------------------------------------------|
 | newsletter_subscription_tdd.md    | Task 2.1: Newsletter Subscription Worker - TDD Implementation |
+| unsubscribe_worker_tdd.md         | Task 2.2: Unsubscribe Worker - TDD Implementation             |
 
-The alignment between the document above and the actual implementation got a bit fuzzy as I had ongoing conversations with Claude.ai as I worked on implementing the code. I asked questions about the work as we progressed and then claude.ai and I made suggestion about what to do next as we progressed.
+The alignment between the first document above and the actual implementation got a bit fuzzy as I had ongoing conversations with Claude.ai as I worked on implementing the code. I asked questions about the work as we progressed and then claude.ai and I made suggestion about what to do next as we progressed.
+
+Second time round to generate the 2nd document I used the following prompt which ran for 20min.
+
+```
+
+```
 
 ## Cloudflare Turnstile Key Types & Security Model
 
