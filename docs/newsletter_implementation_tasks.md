@@ -135,9 +135,9 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 4. Test variable access
 
 **Tests**:
-- [ ] Environment variables are set
-- [ ] Workers can access secrets
-- [ ] Database binding works
+- [X] Environment variables are set
+- [X] Workers can access secrets
+- [X] Database binding works
 - [ ] Secrets are not exposed in responses
 
 ## Phase 3: Frontend Integration
@@ -356,18 +356,28 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - [ ] Error rate alerting
 - [ ] Subscription rate tracking
 
+### Task 6.5: Miscellaneous Tasks
+**Objective**: Catch all for tasks needed to deal with loose ends
+
+**Miscellaneous**:
+- [ ] Remove debugging logging
+- [ ] Add troubleshooting page for turnstile issues
+
 ## Additional Recommendations
 
 ### Code Quality
+
 1. **Version Control**: Use Git with feature branches for each task
 2. **Code Review**: Review all code before merging to main branch
 3. **Linting**: Use ESLint for JavaScript and Black for Python
 4. **Testing**: Write unit tests for critical functions
 
 ### Cloudflare Workers Development Best Practices
+
 **Use the Official Cloudflare Workers Prompt**: When working with AI tools (ChatGPT, Claude, etc.) to generate or debug Cloudflare Workers code, use the comprehensive prompt available at: https://developers.cloudflare.com/workers/get-started/prompting/#build-workers-using-a-prompt
 
 **Key Guidelines from the Cloudflare Prompt**:
+
 - Generate code in **TypeScript by default** unless JavaScript is specifically requested
 - Use **ES modules format exclusively** (NEVER use Service Worker format)
 - Keep all code in a **single file** unless otherwise specified
@@ -380,12 +390,14 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - **Never bake in secrets** into the code - use environment variables
 
 **Test-Driven Development (TDD) Recommendation**: While the Cloudflare prompt doesn't explicitly advocate for TDD, **we strongly recommend using TDD for this newsletter project** because:
+
 - **Security-critical functionality**: Turnstile verification and token validation require thorough testing
 - **Complex business logic**: Email validation, duplicate handling, and unsubscribe token generation benefit from test-first design
 - **Error handling scenarios**: Multiple failure paths need comprehensive test coverage
 - **API contracts**: Clear input/output expectations help define interfaces
 
 **TDD Implementation Strategy**:
+
 1. **Red-Green-Refactor Cycle**: Write failing tests first, implement minimal code to pass, then refactor
 2. **Use Cloudflare's Vitest Integration**: Leverage `@cloudflare/vitest-pool-workers` for testing Workers
 3. **Test Categories**:
