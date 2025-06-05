@@ -30,15 +30,15 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 ```
 
 **Tests**:
-- [ ] Database created successfully
-- [ ] Schema applied without errors
-- [ ] All indexes created correctly
-- [ ] Can insert test record
-- [ ] Can query test record
-- [ ] Unique constraint on email works
+- [X] Database created successfully
+- [X] Schema applied without errors
+- [X] All indexes created correctly
+- [X] Can insert test record
+- [X] Can query test record
+- [X] Unique constraint on email works
 
 ### Task 1.2: Configure API Subdomain
-**Objective**: Set up api.yourdomain.com subdomain for workers
+**Objective**: Set up api.rnwolf.net subdomain for workers
 
 **Implementation Steps**:
 1. Create DNS CNAME record for api.yourdomain.com
@@ -46,9 +46,9 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 3. Test subdomain accessibility
 
 **Tests**:
-- [ ] api.yourdomain.com resolves correctly
-- [ ] SSL certificate is valid
-- [ ] Subdomain serves basic 404 page
+- [X] api.yourdomain.com resolves correctly
+- [X] SSL certificate is valid
+- [X] Subdomain serves basic 404 page
 
 ### Task 1.3: Setup Cloudflare Turnstile
 **Objective**: Configure bot protection for subscription forms
@@ -59,10 +59,10 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 3. Configure auto theme setting
 
 **Tests**:
-- [ ] Site key created for correct domain
-- [ ] Secret key generated and secured
-- [ ] Turnstile widget loads on test page
-- [ ] Auto theme switches with light/dark mode
+- [X] Site key created for correct domain
+- [X] Secret key generated and secured
+- [X] Turnstile widget loads on test page
+- [X] Auto theme switches with light/dark mode
 
 ## Phase 2: Cloudflare Workers Development
 
@@ -85,19 +85,19 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - Return appropriate responses
 
 **Tests**:
-- [ ] Worker deploys successfully
-- [ ] Accepts valid email addresses
-- [ ] Rejects invalid email formats
-- [ ] Verifies Turnstile tokens correctly
-- [ ] Rejects invalid Turnstile tokens
-- [ ] Handles duplicate subscriptions correctly
-- [ ] Updates subscription timestamp for duplicates
-- [ ] Returns success response for valid submissions
-- [ ] Returns error responses for failures
-- [ ] CORS headers allow www.rnwolf.net
-- [ ] Database connection works
-- [ ] Records IP address and user agent
-- [ ] Handles database unavailable gracefully
+- [X] Worker deploys successfully
+- [X] Accepts valid email addresses
+- [X] Rejects invalid email formats
+- [X] Verifies Turnstile tokens correctly
+- [X] Rejects invalid Turnstile tokens
+- [X] Handles duplicate subscriptions correctly
+- [X] Updates subscription timestamp for duplicates
+- [X] Returns success response for valid submissions
+- [X] Returns error responses for failures
+- [X] CORS headers allow www.rnwolf.net
+- [X] Database connection works
+- [X] Records IP address and user agent
+- [X] Handles database unavailable gracefully
 
 ### Task 2.2: Create Unsubscribe Worker
 **Objective**: Handle secure unsubscribe requests
@@ -153,10 +153,10 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 5. Deploy CSP updates
 
 **Tests**:
-- [ ] CSP headers updated correctly
-- [ ] Turnstile script loads without errors
-- [ ] No CSP violation errors in console
-- [ ] Other scripts still work correctly
+- [X] CSP headers updated correctly
+- [X] Turnstile script loads without errors
+- [X] No CSP violation errors in console
+- [X] Other scripts still work correctly
 
 ### Task 3.2: Create Newsletter JavaScript
 **Objective**: Handle form submission and Turnstile integration
@@ -178,16 +178,16 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - Manage button states
 
 **Tests**:
-- [ ] JavaScript loads without errors
-- [ ] Turnstile widget initializes correctly
-- [ ] Form prevents default submission
-- [ ] Email validation works
-- [ ] AJAX requests sent correctly
-- [ ] Success messages display properly
-- [ ] Error messages display properly
-- [ ] Button disabled during submission
-- [ ] Loading text appears correctly
-- [ ] Works with Material Design theme
+- [X] JavaScript loads without errors
+- [X] Turnstile widget initializes correctly
+- [X] Form prevents default submission
+- [X] Email validation works
+- [X] AJAX requests sent correctly
+- [X] Success messages display properly
+- [X] Error messages display properly
+- [X] Button disabled during submission
+- [X] Loading text appears correctly
+- [X] Works with Material Design theme
 
 ### Task 3.3: Create HTML Form Template
 **Objective**: Provide embeddable subscription form
@@ -199,12 +199,12 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 4. Test responsive design
 
 **Tests**:
-- [ ] Form renders correctly
-- [ ] Material Design styling applied
-- [ ] Responsive on mobile devices
+- [X] Form renders correctly
+- [X] Material Design styling applied
+- [X] Responsive on mobile devices
 - [ ] Accessibility attributes present
-- [ ] Works in light and dark modes
-- [ ] Integrates well with MkDocs pages
+- [X] Works in light and dark modes
+- [X] Integrates well with MkDocs pages
 
 ### Task 3.4: MkDocs Integration
 **Objective**: Configure MkDocs to load newsletter functionality
@@ -216,10 +216,9 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 4. Deploy to production
 
 **Tests**:
-- [ ] JavaScript files load on all pages
-- [ ] No JavaScript errors on page load
-- [ ] Form works when embedded in Markdown
-- [ ] Site performance not significantly impacted
+- [X] No JavaScript errors on page load
+- [X] Form works when embedded in Markdown
+- [X] Site performance not significantly impacted
 
 ## Phase 4: Newsletter Distribution System
 
@@ -233,10 +232,10 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 4. Add error handling
 
 **Tests**:
-- [ ] Connects to D1 database successfully
-- [ ] Retrieves active subscribers only
-- [ ] Creates CSV with correct format
-- [ ] Handles API errors gracefully
+- [X] Connects to D1 database successfully
+- [X] Retrieves active subscribers only
+- [X] Creates CSV with correct format
+- [X] Handles API errors gracefully
 - [ ] Excludes unsubscribed users correctly
 
 ### Task 4.2: Create Newsletter Sender Script
@@ -251,14 +250,14 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 6. Add status checking
 
 **Tests**:
-- [ ] Reads CSV file correctly
-- [ ] Connects to SMTP server
-- [ ] Sends test emails successfully
-- [ ] Rate limiting works correctly
-- [ ] Progress tracking updates CSV
-- [ ] Restart capability works
-- [ ] Status command shows correct info
-- [ ] Error handling for SMTP failures
+- [X] Reads CSV file correctly
+- [X] Connects to SMTP server
+- [X] Sends test emails successfully
+- [X] Rate limiting works correctly
+- [X] Progress tracking updates CSV
+- [X] Restart capability works
+- [X] Status command shows correct info
+- [X] Error handling for SMTP failures
 - [ ] Unsubscribe tokens generate correctly
 
 ### Task 4.3: Environment Configuration
@@ -271,9 +270,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 
 **Tests**:
 - [ ] All environment variables documented
-- [ ] Scripts work with Gmail SMTP
-- [ ] Scripts work with SendGrid SMTP
-- [ ] Rate limiting respects provider limits
+- [X] Scripts work with env provided SMTP
 
 ## Phase 5: Testing and Quality Assurance
 
@@ -296,9 +293,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 **Tests**:
 - [ ] Chrome desktop
 - [ ] Firefox desktop
-- [ ] Safari desktop
 - [ ] Chrome mobile
-- [ ] Safari mobile
 - [ ] Edge browser
 
 ### Task 5.3: Performance Testing
@@ -308,7 +303,6 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - [ ] Form loads quickly on slow connections
 - [ ] Worker response times under load
 - [ ] Database performance with many subscribers
-- [ ] Email sending performance with large lists
 
 ### Task 5.4: Security Testing
 **Objective**: Verify security measures are effective
@@ -319,6 +313,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - [ ] Invalid tokens rejected
 - [ ] Rate limiting prevents abuse
 - [ ] CORS headers work correctly
+- [ ] OWASP testing
 
 ## Phase 6: Documentation and Deployment
 
@@ -326,6 +321,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 **Objective**: Create step-by-step deployment guide
 
 **Documentation**:
+
 - [ ] D1 database setup instructions
 - [ ] Worker deployment steps
 - [ ] Environment variable configuration
@@ -345,10 +341,10 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 **Objective**: Deploy to production environment
 
 **Steps**:
-- [ ] Deploy database to production
-- [ ] Deploy workers to production
-- [ ] Update DNS for api subdomain
-- [ ] Deploy frontend changes
+- [X] Deploy database to production
+- [X] Deploy workers to production
+- [X] Update DNS for api subdomain
+- [X] Deploy frontend changes
 - [ ] Test production environment
 
 ### Task 6.4: Monitoring Setup
@@ -374,7 +370,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 **Key Guidelines from the Cloudflare Prompt**:
 - Generate code in **TypeScript by default** unless JavaScript is specifically requested
 - Use **ES modules format exclusively** (NEVER use Service Worker format)
-- Keep all code in a **single file** unless otherwise specified  
+- Keep all code in a **single file** unless otherwise specified
 - Always provide **wrangler.jsonc** (not wrangler.toml) configuration
 - Set `compatibility_date = "2025-03-07"` and `compatibility_flags = ["nodejs_compat"]`
 - **Import all methods, classes and types** used in the code
@@ -426,7 +422,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 
 **Benefits for Our Project**:
 - **Early bug detection**: Catch security issues and edge cases before deployment
-- **Better design**: TDD forces thinking about interfaces and error handling upfront  
+- **Better design**: TDD forces thinking about interfaces and error handling upfront
 - **Confidence in changes**: Comprehensive test suite enables safe refactoring
 - **Documentation**: Tests serve as executable documentation for business logic
 
@@ -450,7 +446,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 
 ## Estimated Timeline
 - **Phase 1**: 1-2 days
-- **Phase 2**: 2-3 days  
+- **Phase 2**: 2-3 days
 - **Phase 3**: 2-3 days
 - **Phase 4**: 2-3 days
 - **Phase 5**: 2-3 days
