@@ -116,14 +116,14 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - Return confirmation HTML
 
 **Tests**:
-- [ ] Worker deploys successfully
-- [ ] Validates HMAC tokens correctly
-- [ ] Rejects invalid tokens
-- [ ] Updates unsubscribed_at correctly
-- [ ] Handles non-existent emails gracefully
-- [ ] Returns proper confirmation page
-- [ ] Allows CORS from any origin
-- [ ] Handles database errors gracefully
+- [X] Worker deploys successfully
+- [X] Validates HMAC tokens correctly
+- [X] Rejects invalid tokens
+- [X] Updates unsubscribed_at correctly
+- [X] Handles non-existent emails gracefully
+- [X] Returns proper confirmation page
+- [X] Allows CORS from any origin
+- [X] Handles database errors gracefully
 
 ### Task 2.3: Environment Variables Setup
 **Objective**: Configure secure secrets for workers
@@ -236,7 +236,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - [X] Retrieves active subscribers only
 - [X] Creates CSV with correct format
 - [X] Handles API errors gracefully
-- [ ] Excludes unsubscribed users correctly
+- [X] Excludes unsubscribed users correctly
 
 ### Task 4.2: Create Newsletter Sender Script
 **Objective**: Send newsletters with rate limiting and restart capability
@@ -258,7 +258,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - [X] Restart capability works
 - [X] Status command shows correct info
 - [X] Error handling for SMTP failures
-- [ ] Unsubscribe tokens generate correctly
+- [X] Unsubscribe tokens generate correctly
 
 ### Task 4.3: Environment Configuration
 **Objective**: Set up environment variables for scripts
@@ -277,7 +277,9 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 ### Task 5.1: End-to-End Testing
 **Objective**: Verify complete subscription flow
 
-**Test Scenarios**:
+Cleanup and consolidate and remove super seeded tests.
+
+**E2E Test Scenarios**:
 - [ ] User subscribes with valid email
 - [ ] User tries to subscribe with invalid email
 - [ ] User subscribes twice with same email
@@ -304,7 +306,13 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 - [ ] Worker response times under load
 - [ ] Database performance with many subscribers
 
-### Task 5.4: Security Testing
+### Task 5.4: Encrypt data at rest - TODO
+**Objective**: If someone steals the database can they do anything with the data? Not if it is encrypted.
+
+**Tests**:
+- [ ]
+
+### Task 5.5: Security Testing
 **Objective**: Verify security measures are effective
 
 **Tests**:
@@ -361,7 +369,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 
 **Miscellaneous**:
 - [ ] Remove debugging logging
-- [ ] Add troubleshooting page for turnstile issues
+- [ ] Add troubleshooting content in MkDocs for turnstile issues
 
 ## Additional Recommendations
 
@@ -369,8 +377,9 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 
 1. **Version Control**: Use Git with feature branches for each task
 2. **Code Review**: Review all code before merging to main branch
-3. **Linting**: Use ESLint for JavaScript and Black for Python
+3. **Linting**: Use ESLint for JavaScript and Ruff for Python
 4. **Testing**: Write unit tests for critical functions
+5. **Github Action**: Automated deployment to production of new releases
 
 ### Cloudflare Workers Development Best Practices
 
@@ -443,6 +452,7 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
 2. **Input Validation**: Validate all inputs on both client and server
 3. **Rate Limiting**: Implement at both application and infrastructure level
 4. **Monitoring**: Set up alerts for unusual activity patterns
+5. **OWASP Recomended testing**: https://www.cloudflare.com/en-gb/learning/security/threats/owasp-top-10/
 
 ### Operational Excellence
 1. **Logging**: Implement comprehensive logging for debugging

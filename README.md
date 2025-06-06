@@ -424,3 +424,236 @@ Newsletter sending complete!
 2025-06-05 12:28:20,595 - INFO - Errors: 0
 2025-06-05 12:28:20,595 - INFO - Total processed: 2
 ```
+
+
+## Deploy Script
+
+## The scripts
+
+To reduce the possibility of making errors when multiple step are involved we have some executable helper scripts.
+
+The deployment scripts provides a complete, production-ready solution that handles everything from initial checks to final cleanup.
+You can now deploy your newsletter service with confidence using just a single command! 🚀
+
+| File Name | Description |
+|-----------|-------------|
+| `./scripts/deploy.sh` | Main deployment script |
+| `./scripts/quick-deploy.sh` | Quick command shortcuts |
+| `./scripts/deploy-config.sh` | Configuration file |
+
+### Why Deploy Scripts?
+
+#### 🚀 Automated Everything
+
+- One command deploys from code to production
+- Automatic testing, migration, deployment, and verification
+- Built-in cleanup and rollback capabilities
+
+#### 🛡️ Safety First
+
+- Multiple confirmation steps for production
+- Automatic backups before deployment
+- Health checks and verification
+- Graceful error handling with rollback
+
+#### 📊 Comprehensive Logging
+
+- Detailed deployment logs with timestamps
+- Color-coded output for easy reading
+- Deployment summaries and notifications
+- Integration with monitoring tools
+
+#### ⚡ Developer Friendly
+
+- Simple command shortcuts
+- Flexible configuration options
+- Environment-specific behaviors
+- CI/CD pipeline ready
+
+#### 🧹 Clean Operations
+
+- Automatic test data cleanup
+- Backup retention management
+- Log file organization
+- No manual cleanup required
+
+### What the scripts do:
+
+#### ✅ Pre-Deployment Checks
+
+- Verifies prerequisites (Node.js, npm, wrangler, git)
+- Checks git status for uncommitted changes
+- Validates environment configuration
+- Verifies required secrets are set
+
+#### ✅ Testing
+
+- Runs type checking
+- Executes unit tests
+- Runs integration tests
+- Performs environment-specific tests
+
+#### ✅ Deployment
+
+- Creates backup of current deployment
+- Runs database migrations
+- Deploys worker to Cloudflare
+- Verifies deployment health
+
+#### ✅ Post-Deployment
+
+- Runs smoke tests (production)
+- Cleans up test data automatically
+- Sends deployment notifications
+- Creates deployment summary
+
+#### ✅ Error Handling
+
+- Automatic rollback on failure
+- Comprehensive logging
+- Graceful error recovery
+
+### Quick Commands
+
+#### Start local development
+
+`./scripts/quick-deploy.sh dev`
+
+#### Run all tests
+
+`./scripts/quick-deploy.sh test`
+
+#### Deploy to staging
+
+`./scripts/quick-deploy.sh staging`
+
+#### Deploy to production
+
+`./scripts/quick-deploy.sh production`
+
+#### Quick staging deploy (skip tests)
+
+`./scripts/quick-deploy.sh staging-quick`
+
+#### Clean up test data
+
+`./scripts/quick-deploy.sh cleanup`
+
+#### Check status
+
+`./scripts/quick-deploy.sh status`
+
+#### View logs
+
+`./scripts/quick-deploy.sh logs production`
+
+#### Rollback
+
+`./scripts/quick-deploy.sh rollback production`
+
+### Full deployments
+
+#### Full staging deployment
+
+`./scripts/deploy.sh staging`
+
+#### Full production deployment with confirmation
+
+`./scripts/deploy.sh production`
+
+#### Force production deployment (no confirmation)
+
+`./scripts/deploy.sh production --force`
+
+#### Deploy without running tests
+
+`./scripts/deploy.sh staging --skip-tests`
+
+#### Only cleanup test data
+
+`./scripts/deploy.sh production --cleanup-only`
+
+### One-Command Deployment Examples
+
+#### Development Workflow
+
+##### Daily development workflow
+
+```bash
+./scripts/quick-deploy.sh dev                    # Start local dev
+./scripts/quick-deploy.sh test                   # Run tests
+./scripts/quick-deploy.sh staging                # Deploy to staging
+./scripts/quick-deploy.sh production             # Deploy to production
+```
+
+##### Emergency Scenarios
+
+###### Quick hotfix deployment
+
+```bash
+./scripts/quick-deploy.sh staging-quick          # Skip tests, deploy fast
+./scripts/quick-deploy.sh production-force       # Force deploy to production
+```
+
+###### Rollback if issues
+
+```bash
+./scripts/quick-deploy.sh rollback production    # Rollback production
+```
+
+###### Monitoring and Maintenance
+
+```bash
+./scripts/quick-deploy.sh status                 # Check all environments
+```
+
+###### View real-time logs
+
+```bash
+./scripts/quick-deploy.sh logs production        # Monitor production logs
+```
+
+###### Clean up test data
+
+```bash
+./scripts/quick-deploy.sh cleanup                # Remove smoke test data
+```
+
+##### Environment-Specific Deployments
+
+###### Deploy specific features to staging
+
+```bash
+git checkout feature-branch
+./scripts/deploy.sh staging --skip-tests
+```
+
+###### Production deployment from release branch
+
+```bash
+git checkout release-v1.2.0
+./scripts/deploy.sh production
+```
+
+##### Batch Operations
+
+###### Deploy to all environments
+
+```bash
+./scripts/deploy.sh staging && ./scripts/deploy.sh production
+```
+
+##### Full test and deploy cycle
+
+```bash
+npm run test:local && ./scripts/deploy.sh staging && ./scripts/deploy.sh production
+```
+
+### Advanced - Config file
+
+```bash {~/.newsletter-deploy-config}
+# ~/.newsletter-deploy-config
+export SLACK_WEBHOOK_URL="your-slack-webhook"
+export NOTIFICATION_EMAIL="your-email@company.com"
+export DEPLOYMENT_TIMEOUT=900  # 15 minutes for slow connections
+```
