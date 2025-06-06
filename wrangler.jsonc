@@ -21,7 +21,8 @@
       ],
       "vars": {
         "ENVIRONMENT": "local",
-        "API_VERSION": "v1"
+        "API_VERSION": "v1",
+        "HMAC_SECRET_KEY": "test-secret"  // Only for local testing
       }
     },
 

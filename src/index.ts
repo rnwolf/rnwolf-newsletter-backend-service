@@ -1,3 +1,5 @@
+import { handleUnsubscribe } from './unsubscribe-handler';
+
 interface Env {
   DB: D1Database;
   TURNSTILE_SECRET_KEY: string;
@@ -176,9 +178,26 @@ export default {
 
     // Handle CORS preflight requests
     if (request.method === 'OPTIONS') {
+      const url = new URL(request.url);
+
+      // Unsubscribe endpoint allows any origin (for email client compatibility)
+      if (url.pathname === '/v1/newsletter/unsubscribe') {
+        return new Response(null, {
+          status: 200,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Max-Age': '86400',
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
+      // All other endpoints use restricted CORS
       return new Response(null, {
         status: 200,
-        headers: CORS_HEADERS
+        headers: CORS_HEADERS  // This should still be the restricted headers
       });
     }
 
@@ -204,6 +223,11 @@ export default {
     // Newsletter subscription endpoint
     if (url.pathname === '/v1/newsletter/subscribe') {
       return handleSubscription(request, env);
+    }
+
+    // Newsletter unsubscribe endpoint
+    if (url.pathname === '/v1/newsletter/unsubscribe') {
+      return handleUnsubscribe(request, env);
     }
 
     return createCORSResponse('Not Found', 404);

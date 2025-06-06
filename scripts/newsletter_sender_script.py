@@ -76,7 +76,7 @@ def generate_unsubscribe_token(email):
         message,
         hashlib.sha256
     ).hexdigest()
-    return base64.urlsafe_b64encode(token.encode()).decode()
+    return base64.urlsafe_b64encode(token.encode()).decode().rstrip('=')
 
 def create_unsubscribe_url(email):
     """Generate complete unsubscribe URL"""
@@ -602,3 +602,13 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Add this to the end of newsletter_sender_script.py temporarily to generate tokens
+# if __name__ == "__main__":
+#     import sys
+#     if len(sys.argv) > 1 and sys.argv[1] == 'generate-token':
+#         email = sys.argv[2] if len(sys.argv) > 2 else 'test@example.com'
+#         token = generate_unsubscribe_token(email)
+#         print(f"Email: {email}")
+#         print(f"Token: {token}")
+#         print(f"URL: http://localhost:8787/v1/newsletter/unsubscribe?token={token}&email={email}")

@@ -50,6 +50,11 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     if (config.setupDatabase) {
       await setupTestDatabase(env);
 
+      // Set test HMAC secret if not already set
+      if (!env.HMAC_SECRET_KEY) {
+        (env as any).HMAC_SECRET_KEY = 'test-secret';
+      }
+
       // Insert test subscribers
       await env.DB.prepare(`
         INSERT INTO subscribers (email, subscribed_at, unsubscribed_at, ip_address, country)
@@ -211,7 +216,7 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
 
       // Mock database error
-      vi.spyOn(env.DB, 'prepare').mockImplementation(() => {
+      const dbSpy = vi.spyOn(env.DB, 'prepare').mockImplementation(() => {
         throw new Error('Database connection failed');
       });
 
@@ -222,6 +227,10 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
       const html = await response.text();
       expect(html).toContain('Service Temporarily Unavailable');
       expect(html).toContain('Our unsubscribe service is temporarily unavailable');
+
+
+      // IMPORTANT: Restore the mock after the test
+      dbSpy.mockRestore();
     });
   });
 
