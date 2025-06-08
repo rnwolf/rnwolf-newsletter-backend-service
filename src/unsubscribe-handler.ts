@@ -267,17 +267,20 @@ export async function handleUnsubscribe(request: Request, env: Env): Promise<Res
 
   } catch (error) {
     console.error('Unsubscribe error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
     });
 
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorName = error instanceof Error ? error.name : undefined;
+
     // Check for database-specific errors (case-insensitive)
-    if (error.message?.toLowerCase().includes('database unavailable') ||
-        error.message?.toLowerCase().includes('database connection failed') ||
-        error.message?.toLowerCase().includes('d1_error') ||
-        error.message?.toLowerCase().includes('database') ||
-        error.name === 'DatabaseError') {
+    if (errorMessage?.toLowerCase().includes('database unavailable') ||
+        errorMessage?.toLowerCase().includes('database connection failed') ||
+        errorMessage?.toLowerCase().includes('d1_error') ||
+        errorMessage?.toLowerCase().includes('database') ||
+        errorName === 'DatabaseError') {
 
       const html = generateErrorHTML(
         'Service Temporarily Unavailable',

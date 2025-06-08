@@ -119,24 +119,27 @@ async function handleSubscription(request: Request, env: Env): Promise<Response>
 
   } catch (error) {
     console.error('Subscription error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
     });
 
     // Check for database-specific errors
-    if (error.message?.includes('Database unavailable') ||
-        error.message?.includes('D1_ERROR') ||
-        error.message?.includes('database') ||
-        error.name === 'DatabaseError') {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorName = error instanceof Error ? error.name : undefined;
+
+    if (errorMessage?.includes('Database unavailable') ||
+        errorMessage?.includes('D1_ERROR') ||
+        errorMessage?.includes('database') ||
+        errorName === 'DatabaseError') {
       return createCORSResponse({
         success: false,
         message: 'Our subscription service is temporarily unavailable for maintenance. Please try again later.'
-      }, 503); // Service Unavailable
+      }, 503);
     }
 
     // Handle Turnstile verification errors specifically
-    if (error.message?.includes('Turnstile') || error.message?.includes('verification')) {
+    if (errorMessage?.includes('Turnstile') || errorMessage?.includes('verification')) {
       return createCORSResponse({
         success: false,
         message: 'Please complete the security verification. If you\'re having trouble, visit our troubleshooting guide for help.',
@@ -148,7 +151,7 @@ async function handleSubscription(request: Request, env: Env): Promise<Response>
     return createCORSResponse({
       success: false,
       message: 'An error occurred while processing your subscription. Please try again.',
-      debug: env.ENVIRONMENT === 'staging' ? error.message : undefined // Only show debug in staging
+      debug: env.ENVIRONMENT === 'staging' ? errorMessage : undefined
     }, 500);
   }
 }

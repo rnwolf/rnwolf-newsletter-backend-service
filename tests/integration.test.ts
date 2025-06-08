@@ -3,6 +3,28 @@ import { env } from 'cloudflare:test';
 import { setupTestDatabase } from './setup';
 import worker from '../src/index';
 
+interface SubscriptionResponse {
+  success: boolean;
+  message: string;
+  troubleshootingUrl?: string;
+  debug?: string;
+}
+
+interface HealthResponse {
+  success: boolean;
+  message: string;
+  database: string;
+  environment: string;
+}
+
+interface DatabaseRow {
+  email: string;
+  subscribed_at: string;
+  unsubscribed_at: string | null;
+  count?: number;
+  [key: string]: unknown;
+}
+
 // Configuration based on environment
 const TEST_CONFIG = {
   local: {
@@ -49,7 +71,7 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
   beforeEach(async () => {
     if (config.setupDatabase) {
       await setupTestDatabase(env);
-      
+
       // Ensure HMAC_SECRET_KEY is set for testing
       if (!env.HMAC_SECRET_KEY) {
         (env as any).HMAC_SECRET_KEY = 'test-secret';
@@ -68,7 +90,7 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: testEmail })
       });
 
-      const subscribeResult = await subscribeResponse.json();
+      const subscribeResult = await subscribeResponse.json() as SubscriptionResponse;
       expect(subscribeResponse.status).toBe(200);
       expect(subscribeResult.success).toBe(true);
       expect(subscribeResult.message).toContain('Thank you for subscribing');
@@ -77,12 +99,13 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const subscriber = await env.DB.prepare(
           'SELECT email, subscribed_at, unsubscribed_at FROM subscribers WHERE email = ?'
-        ).bind(testEmail).first();
+        ).bind(testEmail).first() as DatabaseRow | null;
 
-        expect(subscriber).toBeTruthy();
-        expect(subscriber.email).toBe(testEmail);
-        expect(subscriber.subscribed_at).toBeTruthy();
-        expect(subscriber.unsubscribed_at).toBeNull();
+        if (subscriber) {
+          expect(subscriber.email).toBe(testEmail);
+          expect(subscriber.subscribed_at).toBeTruthy();
+          expect(subscriber.unsubscribed_at).toBeNull();
+        }
       }
 
       // Step 3: Generate unsubscribe token
@@ -106,13 +129,13 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const unsubscribedUser = await env.DB.prepare(
           'SELECT email, subscribed_at, unsubscribed_at FROM subscribers WHERE email = ?'
-        ).bind(testEmail).first();
+        ).bind(testEmail).first() as DatabaseRow | null;
 
         expect(unsubscribedUser).toBeTruthy();
         expect(unsubscribedUser.email).toBe(testEmail);
         expect(unsubscribedUser.subscribed_at).toBeTruthy();
         expect(unsubscribedUser.unsubscribed_at).toBeTruthy();
-        
+
         // Verify unsubscribe timestamp is recent
         const unsubscribeTime = new Date(unsubscribedUser.unsubscribed_at).getTime();
         const now = Date.now();

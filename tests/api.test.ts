@@ -3,6 +3,28 @@ import { env } from 'cloudflare:test';
 import { setupTestDatabase } from './setup';
 import worker from '../src/index';
 
+interface SubscriptionResponse {
+  success: boolean;
+  message: string;
+  troubleshootingUrl?: string;
+  debug?: string;
+}
+
+interface HealthResponse {
+  success: boolean;
+  message: string;
+  database: string;
+  environment: string;
+}
+
+interface DatabaseRow {
+  email: string;
+  subscribed_at: string;
+  unsubscribed_at: string | null;
+  count?: number;
+  [key: string]: unknown;
+}
+
 // Configuration based on environment
 const TEST_CONFIG = {
   local: {
@@ -106,7 +128,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
       expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type');
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
       expect(result.success).toBe(false);
     });
 
@@ -183,7 +205,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
   describe('Health Check', () => {
     it('should return healthy status', async () => {
       const response = await makeRequest('/health');
-      const result = await response.json();
+      const result = await response.json() as HealthResponse;
 
       expect(response.status).toBe(200);
       expect(result.success).toBe(true);
@@ -207,7 +229,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: baseEmail })
       });
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
 
       expect(response.status).toBe(200);
       expect(result.success).toBe(true);
@@ -217,10 +239,11 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const subscriber = await env.DB.prepare(
           'SELECT email FROM subscribers WHERE email = ?'
-        ).bind(baseEmail).first();
+        ).bind(baseEmail).first() as DatabaseRow | null;
 
-        expect(subscriber).toBeTruthy();
-        expect(subscriber.email).toBe(baseEmail);
+        if (subscriber) {
+          expect(subscriber.email).toBe(baseEmail);
+        }
       }
     });
 
@@ -231,7 +254,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: 'invalid-email' })
       });
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
 
       expect(response.status).toBe(400);
       expect(result.success).toBe(false);
@@ -245,7 +268,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({}) // No email field
       });
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
 
       expect(response.status).toBe(400);
       expect(result.success).toBe(false);
@@ -262,7 +285,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: inputEmail })
       });
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
 
       expect(response.status).toBe(200);
       expect(result.success).toBe(true);
@@ -271,10 +294,12 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const subscriber = await env.DB.prepare(
           'SELECT email FROM subscribers WHERE email = ?'
-        ).bind(expectedEmail).first();
+        ).bind(expectedEmail).first() as DatabaseRow | null;
 
-        expect(subscriber).toBeTruthy();
-        expect(subscriber.email).toBe(expectedEmail);
+        if (subscriber) {
+          expect(subscriber.email).toBe(expectedEmail);
+        }
+
       }
     });
 
@@ -288,7 +313,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: testEmail })
       });
 
-      const result1 = await response1.json();
+      const result1 = await response1.json() as SubscriptionResponse;
       expect(response1.status).toBe(200);
       expect(result1.success).toBe(true);
 
@@ -299,7 +324,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: testEmail })
       });
 
-      const result2 = await response2.json();
+      const result2 = await response2.json() as SubscriptionResponse;
       expect(response2.status).toBe(200);
       expect(result2.success).toBe(true);
 
@@ -307,9 +332,9 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const count = await env.DB.prepare(
           'SELECT COUNT(*) as count FROM subscribers WHERE email = ?'
-        ).bind(testEmail).first();
+        ).bind(testEmail).first() as DatabaseRow | null;
 
-        expect(count.count).toBe(1);
+        expect(count?.count).toBe(1);
       }
     });
 
@@ -318,7 +343,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         method: 'GET'
       });
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
 
       expect(response.status).toBe(405);
       expect(result.success).toBe(false);
@@ -339,7 +364,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: '{ invalid json }'
       });
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
       expect(response.status).toBe(500);
       expect(result.success).toBe(false);
       expect(result.message).toContain('An error occurred while processing');
@@ -354,7 +379,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: 'invalid-email' })
       });
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
 
       expect(response.status).toBe(400);
       expect(result).toMatchObject({

@@ -1,6 +1,6 @@
-import type { Env } from 'cloudflare:test';
+import type { D1Database } from '@cloudflare/workers-types';
 
-export async function setupTestDatabase(env: Env) {
+export async function setupTestDatabase(env: { DB: D1Database }) {
   // Drop existing table to ensure clean state
   try {
     await env.DB.exec('DROP TABLE IF EXISTS subscribers');
