@@ -92,6 +92,8 @@ One of the problems I had with my previous online webform was the many bot submi
 
 `npm install -g wrangler@latest`
 
+`npm i -D wrangler@latest`
+
 #### Or if using npx, clear cache and use latest
 
 `npx clear-npx-cache
@@ -167,6 +169,8 @@ Expect output similar to:
 #### Deploy Code
 
 `npm run deploy:staging`
+
+or as an alternative deploy using wrangler cli, for example: `npx wrangler deploy --env production`
 
 #### Test health check to confirm worker is running
 

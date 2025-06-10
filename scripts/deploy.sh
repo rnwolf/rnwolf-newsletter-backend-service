@@ -5,6 +5,8 @@
 
 set -e  # Exit on any error
 
+
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -128,17 +130,59 @@ parse_args() {
     fi
 }
 
-# Function to set Grafana API key
+
+# Function to set Grafana API key based on environment
 setup_grafana_credentials() {
-    if [[ -z "$GRAFANA_API_KEY" ]]; then
-        print_error "GRAFANA_API_KEY environment variable not set"
-        print_status "Please set your Grafana API key:"
-        print_status "  export GRAFANA_API_KEY=your_grafana_api_key"
+    local grafana_key=""
+
+    # Determine which Grafana API key to use based on environment
+    case "$ENVIRONMENT" in
+        local)
+            grafana_key="$GRAFANA_API_KEY"
+            if [[ -z "$grafana_key" ]]; then
+                print_error "GRAFANA_API_KEY environment variable not set for local environment"
+                print_status "Please set: export GRAFANA_API_KEY=your_local_grafana_api_key"
+                exit 1
+            fi
+            ;;
+        staging)
+            grafana_key="$GRAFANA_API_KEY_STAGING"
+            if [[ -z "$grafana_key" ]]; then
+                print_error "GRAFANA_API_KEY_STAGING environment variable not set"
+                print_status "Please set: export GRAFANA_API_KEY_STAGING=your_staging_grafana_api_key"
+                exit 1
+            fi
+            ;;
+        production)
+            grafana_key="$GRAFANA_API_KEY_PRODUCTION"
+            if [[ -z "$grafana_key" ]]; then
+                print_error "GRAFANA_API_KEY_PRODUCTION environment variable not set"
+                print_status "Please set: export GRAFANA_API_KEY_PRODUCTION=your_production_grafana_api_key"
+                exit 1
+            fi
+            ;;
+        *)
+            print_error "Unknown environment: $ENVIRONMENT"
+            exit 1
+            ;;
+    esac
+
+    print_status "Setting Grafana API key for $ENVIRONMENT environment..."
+    echo "$grafana_key" | npx wrangler secret put GRAFANA_API_KEY --env "$ENVIRONMENT"
+
+    if [[ $? -eq 0 ]]; then
+        print_success "Grafana API key set successfully for $ENVIRONMENT"
+    else
+        print_error "Failed to set Grafana API key for $ENVIRONMENT"
         exit 1
     fi
-       print_status "Setting Grafana API key for $ENVIRONMENT..."
-       echo "$GRAFANA_API_KEY" | npx wrangler secret put GRAFANA_API_KEY --env "$ENVIRONMENT"
-    }
+}
+
+# Load environment variables from .env file if it exists
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+    print_status "Loading environment variables from .env file..."
+    export $(cat "$PROJECT_DIR/.env" | grep -v '^#' | xargs)
+fi
 
 # Function to check prerequisites
 check_prerequisites() {
@@ -499,23 +543,23 @@ show_deployment_summary() {
 
 # Function to test metrics endpoint after deployment
 test_metrics_endpoint() {
-    print_step \"Testing metrics endpoint...\"
+    print_step "Testing metrics endpoint..."
 
     local api_url
-    if [[ \"$ENVIRONMENT\" == \"staging\" ]]; then
-        api_url=\"https://api-staging.rnwolf.net\"
-    elif [[ \"$ENVIRONMENT\" == \"production\" ]]; then
-        api_url=\"https://api.rnwolf.net\"
+    if [[ "$ENVIRONMENT" == "staging" ]]; then
+        api_url="https://api-staging.rnwolf.net"
+    elif [[ "$ENVIRONMENT" == "production" ]]; then
+        api_url="https://api.rnwolf.net"
     else
-        print_error \"Unknown environment: $ENVIRONMENT\"
+        print_error "Unknown environment: $ENVIRONMENT"
         return 1
     fi
 
     # Test metrics endpoint
-    if curl -s -f -H \"Authorization: Bearer $GRAFANA_API_KEY\" \"$api_url/metrics/health\" > /dev/null; then
-        print_success \"Metrics endpoint is accessible\"
+    if curl -s -f -H "Authorization: Bearer $GRAFANA_API_KEY" "$api_url/metrics/health" > /dev/null; then
+        print_success "Metrics endpoint is accessible"
     else
-        print_error \"Metrics endpoint test failed\"
+        print_error "Metrics endpoint test failed"
         return 1
     fi
 }

@@ -30,17 +30,20 @@ const TEST_CONFIG = {
   local: {
     baseUrl: 'http://localhost:8787',
     useWorkerFetch: true,
-    setupDatabase: true
+    setupDatabase: true,
+    isLocal: true
   },
   staging: {
     baseUrl: 'https://api-staging.rnwolf.net',
     useWorkerFetch: false,
-    setupDatabase: false
+    setupDatabase: false,
+    isLocal: false
   },
   production: {
     baseUrl: 'https://api.rnwolf.net',
     useWorkerFetch: false,
-    setupDatabase: false
+    setupDatabase: false,
+    isLocal: false
   }
 };
 
@@ -59,7 +62,19 @@ async function makeRequest(path: string, options?: RequestInit): Promise<Respons
     return await worker.fetch(request, env);
   } else {
     // Remote testing via real HTTP
+    console.log(`Making real HTTP request to: ${url}`);
     return await fetch(url, options);
+  }
+}
+
+// Helper function to generate unique test emails for remote environments
+function generateTestEmail(base: string): string {
+  if (config.isLocal) {
+    return base;
+  } else {
+    // For staging/production, add timestamp to ensure uniqueness
+    const timestamp = Date.now();
+    return base.replace('@', `-${timestamp}@`);
   }
 }
 
@@ -92,7 +107,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should include CORS headers in successful POST responses', async () => {
-      const testEmail = TEST_ENV === 'local' ? 'cors-test@example.com' : `cors-test-${Date.now()}@example.com`;
+      const testEmail = generateTestEmail('cors-test@example.com');
 
       const response = await makeRequest('/v1/newsletter/subscribe', {
         method: 'POST',
@@ -212,7 +227,8 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       expect(result.database).toBe('Connected');
       expect(result.message).toContain('Newsletter API is running');
 
-      if (TEST_ENV !== 'local') {
+      // For remote environments, verify the environment matches
+      if (!config.isLocal) {
         expect(result.environment).toBe(TEST_ENV);
       }
     });
@@ -220,13 +236,12 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
 
   describe('Newsletter Subscription', () => {
     it('should accept valid email subscription', async () => {
-      // Use timestamp for remote tests to ensure uniqueness
-      const baseEmail = TEST_ENV === 'local' ? 'test@example.com' : `test-${Date.now()}@example.com`;
+      const testEmail = generateTestEmail('test@example.com');
 
       const response = await makeRequest('/v1/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: baseEmail })
+        body: JSON.stringify({ email: testEmail })
       });
 
       const result = await response.json() as SubscriptionResponse;
@@ -236,13 +251,13 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       expect(result.message).toContain('Thank you for subscribing');
 
       // For local tests, verify database storage
-      if (TEST_ENV === 'local') {
+      if (config.isLocal) {
         const subscriber = await env.DB.prepare(
           'SELECT email FROM subscribers WHERE email = ?'
-        ).bind(baseEmail).first() as DatabaseRow | null;
+        ).bind(testEmail).first() as DatabaseRow | null;
 
         if (subscriber) {
-          expect(subscriber.email).toBe(baseEmail);
+          expect(subscriber.email).toBe(testEmail);
         }
       }
     });
@@ -276,7 +291,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should normalize email addresses', async () => {
-      const inputEmail = TEST_ENV === 'local' ? 'User@Example.COM' : `User-${Date.now()}@Example.COM`;
+      const inputEmail = generateTestEmail('User@Example.COM');
       const expectedEmail = inputEmail.toLowerCase();
 
       const response = await makeRequest('/v1/newsletter/subscribe', {
@@ -291,7 +306,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       expect(result.success).toBe(true);
 
       // For local tests, verify normalization in database
-      if (TEST_ENV === 'local') {
+      if (config.isLocal) {
         const subscriber = await env.DB.prepare(
           'SELECT email FROM subscribers WHERE email = ?'
         ).bind(expectedEmail).first() as DatabaseRow | null;
@@ -299,12 +314,11 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         if (subscriber) {
           expect(subscriber.email).toBe(expectedEmail);
         }
-
       }
     });
 
     it('should handle duplicate subscriptions', async () => {
-      const testEmail = TEST_ENV === 'local' ? 'duplicate@example.com' : `duplicate-${Date.now()}@example.com`;
+      const testEmail = generateTestEmail('duplicate@example.com');
 
       // First subscription
       const response1 = await makeRequest('/v1/newsletter/subscribe', {
@@ -329,7 +343,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       expect(result2.success).toBe(true);
 
       // For local tests, verify only one record exists
-      if (TEST_ENV === 'local') {
+      if (config.isLocal) {
         const count = await env.DB.prepare(
           'SELECT COUNT(*) as count FROM subscribers WHERE email = ?'
         ).bind(testEmail).first() as DatabaseRow | null;
@@ -386,7 +400,13 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         success: false,
         message: expect.stringContaining('Invalid email address')
       });
-      expect(result).not.toHaveProperty('debug'); // No debug info in production
+
+      // Debug info should only be present in staging
+      if (TEST_ENV === 'staging') {
+        // staging might have debug info
+      } else {
+        expect(result).not.toHaveProperty('debug');
+      }
     });
 
     it('should return proper error structure for missing email', async () => {
@@ -406,8 +426,8 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should return troubleshooting URL for Turnstile failures', async () => {
-      // Mock Turnstile failure
-      if (TEST_ENV === 'local') {
+      // Mock Turnstile failure only for local tests
+      if (config.isLocal) {
         global.fetch = vi.fn().mockResolvedValue(
           new Response(JSON.stringify({ success: false }), {
             status: 200,
@@ -420,7 +440,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: 'test@example.com',
+          email: generateTestEmail('test@example.com'),
           turnstileToken: 'invalid-token'
         })
       });
@@ -436,7 +456,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should include debug info only in staging environment', async () => {
-      // This test would need to be run specifically in staging
+      // This test only makes sense for staging
       if (TEST_ENV === 'staging') {
         // Force an error by sending malformed request
         const response = await makeRequest('/v1/newsletter/subscribe', {
@@ -449,11 +469,14 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
 
         expect(response.status).toBe(500);
         expect(result).toHaveProperty('debug'); // Debug info should be present in staging
+      } else {
+        // For non-staging environments, we don't expect debug info
+        console.log(`Skipping debug info test for ${TEST_ENV} environment`);
       }
     });
 
     it('should handle network timeouts gracefully', async () => {
-      if (TEST_ENV === 'local') {
+      if (config.isLocal) {
         // Mock a network timeout for Turnstile verification
         global.fetch = vi.fn().mockRejectedValue(new Error('Network timeout'));
 
@@ -461,7 +484,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: 'test@example.com',
+            email: generateTestEmail('test@example.com'),
             turnstileToken: 'valid-token'
           })
         });
@@ -471,11 +494,12 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         expect(response.status).toBe(400);
         expect(result).toMatchObject({
           success: false,
-          message: expect.stringContaining('Please complete the security verification'), // Updated message
+          message: expect.stringContaining('Please complete the security verification'),
           troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
         });
+      } else {
+        console.log(`Skipping network timeout test for ${TEST_ENV} environment`);
       }
     });
   });
-
 });
