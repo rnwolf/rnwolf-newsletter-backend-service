@@ -128,6 +128,18 @@ parse_args() {
     fi
 }
 
+# Function to set Grafana API key
+setup_grafana_credentials() {
+    if [[ -z "$GRAFANA_API_KEY" ]]; then
+        print_error "GRAFANA_API_KEY environment variable not set"
+        print_status "Please set your Grafana API key:"
+        print_status "  export GRAFANA_API_KEY=your_grafana_api_key"
+        exit 1
+    fi
+       print_status "Setting Grafana API key for $ENVIRONMENT..."
+       echo "$GRAFANA_API_KEY" | npx wrangler secret put GRAFANA_API_KEY --env "$ENVIRONMENT"
+    }
+
 # Function to check prerequisites
 check_prerequisites() {
     print_step "Checking prerequisites..."
@@ -186,7 +198,7 @@ verify_environment_config() {
 
     # Check environment variables and secrets
     print_status "Checking required secrets for $ENVIRONMENT environment..."
-    
+
     local required_secrets=("TURNSTILE_SECRET_KEY" "HMAC_SECRET_KEY")
     for secret in "${required_secrets[@]}"; do
         if ! npx wrangler secret list --env "$ENVIRONMENT" 2>/dev/null | grep -q "$secret"; then
@@ -241,7 +253,7 @@ backup_current_deployment() {
 
     # Save current wrangler configuration
     cp "$PROJECT_DIR/wrangler.jsonc" "$backup_dir/"
-    
+
     # Save current source code
     tar -czf "$backup_dir/source-backup.tar.gz" -C "$PROJECT_DIR" src/ tests/ package.json package-lock.json tsconfig.json vitest.config.ts
 
@@ -341,11 +353,11 @@ run_environment_tests() {
     elif [[ "$ENVIRONMENT" == "production" ]]; then
         if [[ "$RUN_SMOKE_TESTS" == true ]]; then
             print_status "Running production smoke tests..."
-            
+
             # Run smoke tests and capture emails that need cleanup
             if npm run test:smoke:production 2>&1 | tee /tmp/smoke-test-output.log; then
                 print_success "Production smoke tests passed"
-                
+
                 # Extract test emails for cleanup
                 if grep -o 'smoke-test-[0-9]*@smoke-test\.example\.com' /tmp/smoke-test-output.log > "$SMOKE_TEST_EMAILS_FILE" 2>/dev/null; then
                     print_status "Test emails saved to $SMOKE_TEST_EMAILS_FILE"
@@ -374,7 +386,7 @@ cleanup_test_data() {
     local email_count=$(wc -l < "$SMOKE_TEST_EMAILS_FILE" 2>/dev/null || echo "0")
     if [[ "$email_count" -gt 0 ]]; then
         print_status "Found $email_count test emails to clean up"
-        
+
         # Run cleanup script
         if node "$PROJECT_DIR/tests/cleanup-smoke-tests.js" --from-file "$SMOKE_TEST_EMAILS_FILE"; then
             print_success "Test data cleanup completed"
@@ -441,12 +453,12 @@ EOF
 # Function to handle deployment rollback
 handle_rollback() {
     print_error "Deployment failed. Would you like to rollback?"
-    
+
     if [[ "$FORCE_DEPLOY" != true ]]; then
         read -p "Rollback to previous version? (y/N): " -r
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             print_step "Rolling back deployment..."
-            
+
             # Rollback using wrangler
             if npx wrangler rollback --env "$ENVIRONMENT"; then
                 print_success "Rollback completed successfully"
@@ -485,6 +497,30 @@ show_deployment_summary() {
     echo ""
 }
 
+# Function to test metrics endpoint after deployment
+test_metrics_endpoint() {
+    print_step \"Testing metrics endpoint...\"
+
+    local api_url
+    if [[ \"$ENVIRONMENT\" == \"staging\" ]]; then
+        api_url=\"https://api-staging.rnwolf.net\"
+    elif [[ \"$ENVIRONMENT\" == \"production\" ]]; then
+        api_url=\"https://api.rnwolf.net\"
+    else
+        print_error \"Unknown environment: $ENVIRONMENT\"
+        return 1
+    fi
+
+    # Test metrics endpoint
+    if curl -s -f -H \"Authorization: Bearer $GRAFANA_API_KEY\" \"$api_url/metrics/health\" > /dev/null; then
+        print_success \"Metrics endpoint is accessible\"
+    else
+        print_error \"Metrics endpoint test failed\"
+        return 1
+    fi
+}
+
+
 # Main deployment function
 main() {
     # Start logging
@@ -520,6 +556,7 @@ main() {
 
     # Execute deployment steps
     check_prerequisites
+    setup_grafana_credentials
     verify_environment_config
     run_tests
     backup_current_deployment
@@ -528,6 +565,7 @@ main() {
     run_environment_tests
     cleanup_test_data
     send_deployment_notification
+    test_metrics_endpoint
 
     # Show success summary
     show_deployment_summary

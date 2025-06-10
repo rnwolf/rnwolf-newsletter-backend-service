@@ -22,7 +22,8 @@
       "vars": {
         "ENVIRONMENT": "local",
         "API_VERSION": "v1",
-        "HMAC_SECRET_KEY": "test-secret"  // Only for local testing
+          "HMAC_SECRET_KEY": "test-secret",
+          "GRAFANA_API_KEY": "local-test-key"
       }
     },
 
@@ -44,7 +45,10 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "API_VERSION": "v1"
-      }
+      },
+      "secrets_to_set": [
+          "GRAFANA_API_KEY"
+        ]
     },
 
     "production": {
@@ -65,7 +69,10 @@
       "vars": {
         "ENVIRONMENT": "production",
         "API_VERSION": "v1"
-      }
+      },
+      "secrets_to_set": [
+          "GRAFANA_API_KEY"
+        ]
     }
   }
 }
