@@ -3,6 +3,7 @@ interface CloudflareEnv {
   TURNSTILE_SECRET_KEY: string;
   HMAC_SECRET_KEY: string;
   ENVIRONMENT: string;
+  GRAFANA_API_KEY: string;
 }
 
 declare module 'cloudflare:test' {

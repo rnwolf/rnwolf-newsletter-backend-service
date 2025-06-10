@@ -24,7 +24,7 @@ export class MetricsHandler {
     // Authenticate request
     const authResult = this.authenticateRequest(request);
     if (!authResult.success) {
-      return this.unauthorizedResponse(authResult.error);
+      return this.unauthorizedResponse(authResult.error || 'Authentication failed');
     }
 
     const url = new URL(request.url);
@@ -211,9 +211,9 @@ export class MetricsHandler {
   // Collect system metrics
   private async collectSystemMetrics() {
     return {
-      worker_memory_used: performance.memory?.usedJSHeapSize || 0,
-      worker_memory_total: performance.memory?.totalJSHeapSize || 0,
-      worker_memory_limit: performance.memory?.jsHeapSizeLimit || 0,
+      worker_memory_used: (performance as any).memory?.usedJSHeapSize || 0,
+      worker_memory_total: (performance as any).memory?.totalJSHeapSize || 0,
+      worker_memory_limit: (performance as any).memory?.jsHeapSizeLimit || 0,
       uptime: Date.now() // Approximate since workers are stateless
     };
   }

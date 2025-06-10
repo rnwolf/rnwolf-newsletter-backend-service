@@ -251,7 +251,7 @@ describe(`Performance Tests (${TEST_ENV} environment)`, () => {
           expect(response.status).toBe(200);
 
           const result = await response.json();
-          expect(result.database).toBe('Connected');
+          expect((result as any).database).toBe('Connected');
 
           return { success: true, duration, index };
         } catch (error) {
@@ -283,12 +283,13 @@ describe(`Performance Tests (${TEST_ENV} environment)`, () => {
   describe('Memory and Resource Usage', () => {
     it('should maintain reasonable memory usage under load', async () => {
       // Check if performance.memory is available
-      if (!performance.memory || !performance.memory.usedJSHeapSize) {
-        console.log('Memory API not available in test environment, skipping memory test');
-        return; // Skip test if memory API is not available
+      const memoryAPI = (performance as any).memory;
+      if (!memoryAPI || !memoryAPI.usedJSHeapSize) {
+        console.log('Memory API not available, skipping test');
+        return;
       }
 
-      const initialMemory = performance.memory.usedJSHeapSize;
+      const initialMemory = memoryAPI.usedJSHeapSize;
 
       // Run a moderate load test
       await runLoadTest(
@@ -298,7 +299,7 @@ describe(`Performance Tests (${TEST_ENV} environment)`, () => {
         20
       );
 
-      const finalMemory = performance.memory.usedJSHeapSize;
+      const finalMemory = memoryAPI.usedJSHeapSize;
       const memoryIncrease = finalMemory - initialMemory;
 
       // Handle case where initial memory is 0
