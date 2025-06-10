@@ -169,7 +169,7 @@ async function verifyTurnstile(token: string, secretKey: string): Promise<boolea
     return result.success;
 
   } catch (error) {
-    console.error('Turnstile verification error:', error);
+    console.error('Turnstile verification error:', error instanceof Error ? error.message : String(error));
     return false;
   }
 }
@@ -218,7 +218,7 @@ export default {
         return createCORSResponse({
           success: false,
           message: 'Database connection failed',
-          error: error.message
+          error: error instanceof Error ? error.message : String(error)
         }, 500);
       }
     }

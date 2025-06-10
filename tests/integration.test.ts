@@ -10,6 +10,7 @@ interface SubscriptionResponse {
   debug?: string;
 }
 
+
 interface HealthResponse {
   success: boolean;
   message: string;
@@ -132,14 +133,18 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
         ).bind(testEmail).first() as DatabaseRow | null;
 
         expect(unsubscribedUser).toBeTruthy();
-        expect(unsubscribedUser.email).toBe(testEmail);
-        expect(unsubscribedUser.subscribed_at).toBeTruthy();
-        expect(unsubscribedUser.unsubscribed_at).toBeTruthy();
+        if (unsubscribedUser) {
+          expect(unsubscribedUser.email).toBe(testEmail);
+          expect(unsubscribedUser.subscribed_at).toBeTruthy();
+          expect(unsubscribedUser.unsubscribed_at).toBeTruthy();
 
-        // Verify unsubscribe timestamp is recent
-        const unsubscribeTime = new Date(unsubscribedUser.unsubscribed_at).getTime();
-        const now = Date.now();
-        expect(unsubscribeTime).toBeGreaterThan(now - 10000); // Within last 10 seconds
+          // Verify unsubscribe timestamp is recent
+          if (unsubscribedUser.unsubscribed_at) {
+            const unsubscribeTime = new Date(unsubscribedUser.unsubscribed_at).getTime();
+            const now = Date.now();
+            expect(unsubscribeTime).toBeGreaterThan(now - 10000); // Within last 10 seconds
+          }
+        }
       }
     });
 
@@ -172,7 +177,7 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: testEmail })
       });
 
-      const resubscribeResult = await subscribeResponse2.json();
+      const resubscribeResult = await subscribeResponse2.json() as SubscriptionResponse;
       expect(subscribeResponse2.status).toBe(200);
       expect(resubscribeResult.success).toBe(true);
 
@@ -180,12 +185,14 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const resubscribedUser = await env.DB.prepare(
           'SELECT email, subscribed_at, unsubscribed_at FROM subscribers WHERE email = ?'
-        ).bind(testEmail).first();
+        ).bind(testEmail).first() as DatabaseRow | null;
 
         expect(resubscribedUser).toBeTruthy();
-        expect(resubscribedUser.email).toBe(testEmail);
-        expect(resubscribedUser.subscribed_at).toBeTruthy();
-        expect(resubscribedUser.unsubscribed_at).toBeNull(); // Should be null after resubscribing
+        if (resubscribedUser) {
+          expect(resubscribedUser.email).toBe(testEmail);
+          expect(resubscribedUser.subscribed_at).toBeTruthy();
+          expect(resubscribedUser.unsubscribed_at).toBeNull(); // Should be null after resubscribing
+        }
       }
     });
 
@@ -215,10 +222,12 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const subscriber = await env.DB.prepare(
           'SELECT email, subscribed_at, unsubscribed_at FROM subscribers WHERE email = ?'
-        ).bind(testEmail).first();
+        ).bind(testEmail).first() as DatabaseRow | null;
 
         expect(subscriber).toBeTruthy();
-        expect(subscriber.unsubscribed_at).toBeNull(); // Should still be subscribed
+        if (subscriber) {
+          expect(subscriber.unsubscribed_at).toBeNull(); // Should still be subscribed
+        }
       }
     });
 
@@ -256,14 +265,14 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const subscriber1 = await env.DB.prepare(
           'SELECT unsubscribed_at FROM subscribers WHERE email = ?'
-        ).bind(testEmail1).first();
+        ).bind(testEmail1).first() as DatabaseRow | null;
 
         const subscriber2 = await env.DB.prepare(
           'SELECT unsubscribed_at FROM subscribers WHERE email = ?'
-        ).bind(testEmail2).first();
+        ).bind(testEmail2).first() as DatabaseRow | null;
 
-        expect(subscriber1.unsubscribed_at).toBeNull();
-        expect(subscriber2.unsubscribed_at).toBeNull();
+        expect(subscriber1?.unsubscribed_at).toBeNull();
+        expect(subscriber2?.unsubscribed_at).toBeNull();
       }
     });
   });

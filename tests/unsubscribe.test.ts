@@ -3,6 +3,14 @@ import { env } from 'cloudflare:test';
 import { setupTestDatabase } from './setup';
 import worker from '../src/index';
 
+interface DatabaseRow {
+  email: string;
+  subscribed_at: string;
+  unsubscribed_at: string | null;
+  [key: string]: unknown;
+}
+
+
 // Configuration based on environment
 const TEST_CONFIG = {
   local: {
@@ -87,9 +95,11 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
       if (TEST_ENV === 'local') {
         const subscriber = await env.DB.prepare(
           'SELECT unsubscribed_at FROM subscribers WHERE email = ?'
-        ).bind(email).first();
+        ).bind(email).first() as DatabaseRow | null;
 
-        expect(subscriber.unsubscribed_at).toBeTruthy();
+        if (subscriber) {
+          expect(subscriber.unsubscribed_at).toBeTruthy();
+        }
       }
     });
 
@@ -167,8 +177,8 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
       // Verify user is initially subscribed
       const beforeSub = await env.DB.prepare(
         'SELECT unsubscribed_at FROM subscribers WHERE email = ?'
-      ).bind(email).first();
-      expect(beforeSub.unsubscribed_at).toBeNull();
+      ).bind(email).first() as DatabaseRow | null;
+      expect(beforeSub?.unsubscribed_at).toBeNull();
 
       const response = await makeRequest(`/v1/newsletter/unsubscribe?token=${token}&email=${encodeURIComponent(email)}`);
 
@@ -177,10 +187,12 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
       // Verify user is now unsubscribed
       const afterSub = await env.DB.prepare(
         'SELECT unsubscribed_at FROM subscribers WHERE email = ?'
-      ).bind(email).first();
+      ).bind(email).first() as DatabaseRow | null;
 
-      expect(afterSub.unsubscribed_at).toBeTruthy();
-      expect(new Date(afterSub.unsubscribed_at).getTime()).toBeGreaterThan(Date.now() - 5000); // Within last 5 seconds
+      expect(afterSub?.unsubscribed_at).toBeTruthy();
+      if (afterSub?.unsubscribed_at) {
+        expect(new Date(afterSub.unsubscribed_at).getTime()).toBeGreaterThan(Date.now() - 5000);
+      }
     });
 
     it('should handle already unsubscribed users gracefully', async () => {
