@@ -16,15 +16,21 @@
     "deploy:production:full": "./scripts/deploy.sh production",
     "deploy:quick": "./scripts/quick-deploy.sh",
     "deploy:cleanup": "./scripts/deploy.sh production --cleanup-only",
+
     "test": "vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
     "test:watch": "vitest tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
     "test:unit": "vitest run tests/api.test.ts tests/unsubscribe.test.ts",
     "test:integration": "vitest run tests/integration.test.ts",
     "test:local": "TEST_ENV=local vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
-    "test:staging": "TEST_ENV=staging vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
-    "test:production": "TEST_ENV=production vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
-    "test:smoke:production": "TEST_ENV=production vitest run tests/api.test.ts --reporter=verbose --bail=1",
-    "test:smoke:staging": "TEST_ENV=staging vitest run tests/api.test.ts --reporter=verbose --bail=1",
+    "test:staging": "TEST_ENV=staging vitest run --config vitest.smoke.config.ts tests/smoke-remote.test.ts --reporter=verbose",
+    "test:production": "TEST_ENV=production vitest run --config vitest.smoke.config.ts tests/smoke-remote.test.ts --reporter=verbose",
+
+    "test:staging:workers": "TEST_ENV=staging vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
+    "test:production:workers": "TEST_ENV=production vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
+
+    "test:smoke:staging": "TEST_ENV=staging vitest run --config vitest.smoke.config.ts tests/smoke-remote.test.ts --reporter=verbose",
+    "test:smoke:production": "TEST_ENV=production vitest run --config vitest.smoke.config.ts tests/smoke-remote.test.ts --reporter=verbose --bail=1",
+
     "test:health:production": "curl -f https://api.rnwolf.net/health",
     "test:health:staging": "curl -f https://api-staging.rnwolf.net/health",
     "test:all-envs": "npm run test:local && npm run test:staging",
@@ -32,12 +38,15 @@
     "test:performance:staging": "TEST_ENV=staging vitest run tests/performance.test.ts",
     "test:performance:production": "TEST_ENV=production vitest run tests/performance.test.ts --reporter=verbose",
     "test:load": "npm run test:performance",
+
     "metrics:local": "curl -H 'Authorization: Bearer local-test-key' http://localhost:8787/metrics/json",
     "metrics:staging": "curl -H 'Authorization: Bearer $GRAFANA_API_KEY' https://api-staging.rnwolf.net/metrics/json",
     "metrics:production": "curl -H 'Authorization: Bearer $GRAFANA_API_KEY' https://api.rnwolf.net/metrics/json",
+
     "db:migrate:local": "wrangler d1 execute DB --env local --file=./migrations/001_initial_schema.sql",
     "db:migrate:staging": "wrangler d1 execute DB --env staging --remote --file=./migrations/001_initial_schema.sql",
     "db:migrate:production": "wrangler d1 execute DB --env production --remote --file=./migrations/001_initial_schema.sql",
+
     "type-check": "tsc --noEmit",
     "lint": "echo 'Add linting when ready'"
   },
