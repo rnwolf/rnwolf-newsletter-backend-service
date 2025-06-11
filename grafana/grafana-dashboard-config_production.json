@@ -1,0 +1,276 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Newsletter Backend Service - Performance & Observability (production)",
+    "tags": ["newsletter", "cloudflare-workers", "performance","production"],
+    "uid": "newsletter-backend-prod",
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Health Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "newsletter_database_status",
+            "legendFormat": "Database Status",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(newsletter_subscriptions[5m])",
+            "legendFormat": "Subscription Rate",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.8},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32}
+      },
+      {
+        "id": 9,
+        "title": "Worker Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "worker_memory_used / worker_memory_total * 100",
+            "legendFormat": "Memory Usage %",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Percentage",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32}
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "environment",
+          "type": "query",
+          "query": "label_values(environment)",
+          "current": {
+            "value": "production",
+            "text": "production"
+          }
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "iconColor": "green",
+          "query": "deployment",
+          "type": "tags"
+        }
+      ]
+    }
+  },
+  "datasource_config": {
+    "name": "Newsletter API Metrics",
+    "type": "prometheus",
+    "url": "https://api.rnwolf.net/metrics",
+    "access": "proxy",
+    "basicAuth": false,
+    "jsonData": {
+      "httpHeaderName1": "Authorization",
+      "timeInterval": "30s"
+    },
+    "secureJsonData": {
+      "httpHeaderValue1": "Bearer glsa_YOUR_PRODUCTION_TOKEN_HERE"
+    }
+  },
+  "alerting_rules": [
+    {
+      "name": "High Error Rate",
+      "condition": "rate(http_errors_total[5m]) > 0.1",
+      "severity": "warning",
+      "description": "Error rate is above 10% for 5 minutes"
+    },
+    {
+      "name": "High Response Time",
+      "condition": "histogram_quantile(0.95, rate(http_request_duration_bucket[5m])) > 2000",
+      "severity": "warning",
+      "description": "95th percentile response time is above 2 seconds"
+    },
+    {
+      "name": "Database Connection Failed",
+      "condition": "database_health_status == 0",
+      "severity": "critical",
+      "description": "Database health check is failing"
+    },
+    {
+      "name": "Low Subscription Rate",
+      "condition": "rate(newsletter_subscriptions[1h]) < 0.001",
+      "severity": "info",
+      "description": "Subscription rate is unusually low"
+    }
+  ]
+}y": 0}
+      },
+      {
+        "id": 2,
+        "title": "HTTP Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{method}} {{path}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Requests/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Response Time Percentiles",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_bucket[5m]))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_bucket[5m]))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_bucket[5m]))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Response Time (ms)",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Newsletter Subscription Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "newsletter_subscribers_total",
+            "legendFormat": "Total Subscribers",
+            "refId": "A"
+          },
+          {
+            "expr": "newsletter_subscribers_active",
+            "legendFormat": "Active Subscribers",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(newsletter_subscriptions[1h])",
+            "legendFormat": "Hourly Subscription Rate",
+            "refId": "C"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 5,
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_errors_total[5m])",
+            "legendFormat": "{{error_type}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Errors/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "Database Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "database_health_response_time",
+            "legendFormat": "DB Response Time",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(database_errors[5m])",
+            "legendFormat": "DB Errors/sec",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 7,
+        "title": "Turnstile Verification Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(newsletter_turnstile_verifications[5m])",
+            "legendFormat": "{{result}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "Geographic Distribution",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (country) (newsletter_subscriptions)",
+            "legendFormat": "{{country}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 40
+        }
+      }
+    ]
+  }
+}

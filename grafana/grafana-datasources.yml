@@ -1,0 +1,45 @@
+# grafana-datasources.yml
+# Configuration for Grafana Cloud data sources
+
+apiVersion: 1
+
+datasources:
+  # Staging Environment
+  - name: Newsletter-API-Staging
+    type: prometheus
+    access: proxy
+    url: https://api-staging.rnwolf.net/metrics
+    isDefault: false
+    jsonData:
+      timeInterval: "30s"
+      httpMethod: GET
+      httpHeaderName1: "Authorization"
+    secureJsonData:
+      httpHeaderValue1: "Bearer glsa_YOUR_STAGING_TOKEN_HERE"
+    editable: true
+
+  # Production Environment
+  - name: Newsletter-API-Production
+    type: prometheus
+    access: proxy
+    url: https://api.rnwolf.net/metrics
+    isDefault: true
+    jsonData:
+      timeInterval: "30s"
+      httpMethod: GET
+      httpHeaderName1: "Authorization"
+    secureJsonData:
+      httpHeaderValue1: "Bearer glsa_YOUR_PRODUCTION_TOKEN_HERE"
+    editable: true
+
+  # JSON API Data Source (Custom)
+  - name: Newsletter-JSON-API
+    type: grafana-simple-json-datasource
+    access: proxy
+    url: https://api.rnwolf.net/metrics/json
+    isDefault: false
+    jsonData:
+      httpHeaderName1: "Authorization"
+    secureJsonData:
+      httpHeaderValue1: "Bearer glsa_YOUR_PRODUCTION_TOKEN_HERE"
+    editable: true
