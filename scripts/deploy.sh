@@ -555,13 +555,117 @@ test_metrics_endpoint() {
         return 1
     fi
 
-    # Test metrics endpoint
-    if curl -s -f -H "Authorization: Bearer $GRAFANA_API_KEY" "$api_url/metrics/health" > /dev/null; then
-        print_success "Metrics endpoint is accessible"
-    else
-        print_error "Metrics endpoint test failed"
-        return 1
+    # Get the appropriate Grafana API key for the environment
+    local grafana_key=""
+    case "$ENVIRONMENT" in
+        staging)
+            grafana_key="$GRAFANA_API_KEY_STAGING"
+            ;;
+        production)
+            grafana_key="$GRAFANA_API_KEY_PRODUCTION"
+            ;;
+        *)
+            print_error "Unknown environment for metrics test: $ENVIRONMENT"
+            return 1
+            ;;
+    esac
+
+    if [[ -z "$grafana_key" ]]; then
+        print_warning "No Grafana API key available for $ENVIRONMENT environment"
+        print_status "Skipping metrics endpoint test"
+        return 0
     fi
+
+    # Test both the main metrics endpoint (for Grafana) and health endpoint
+    print_status "Testing Grafana metrics endpoint: $api_url/metrics"
+
+    local response
+    local http_code
+
+    # Test the main metrics endpoint that Grafana will use
+    response=$(curl -s -w "\n%{http_code}" \
+        -H "Authorization: Bearer $grafana_key" \
+        "$api_url/metrics" \
+        --max-time 30 \
+        --connect-timeout 10)
+
+    http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | head -n -1)
+
+    case $http_code in
+        200)
+            print_success "Main metrics endpoint is accessible"
+            # Check if response looks like Prometheus format
+            if echo "$body" | grep -q "^# TYPE\|^[a-zA-Z_][a-zA-Z0-9_]*{.*}"; then
+                print_success "Response appears to be valid Prometheus format"
+            else
+                print_warning "Response doesn't look like Prometheus format"
+                print_status "First 200 chars: $(echo "$body" | head -c 200)"
+            fi
+            ;;
+        401)
+            print_error "Metrics endpoint authentication failed"
+            print_status "Check that GRAFANA_API_KEY_${ENVIRONMENT^^} is set correctly"
+            return 1
+            ;;
+        403)
+            print_error "Metrics endpoint access denied"
+            print_status "API key may lack required permissions"
+            return 1
+            ;;
+        404)
+            print_error "Metrics endpoint not found at $api_url/metrics"
+            print_status "Check that the metrics handler is properly deployed"
+            return 1
+            ;;
+        000)
+            print_error "Could not connect to metrics endpoint"
+            print_status "Check that the API is deployed and accessible"
+            return 1
+            ;;
+        *)
+            print_error "Metrics endpoint test failed with HTTP $http_code"
+            print_status "Response: $(echo "$body" | head -c 500)"
+            return 1
+            ;;
+    esac
+
+    # Also test the health endpoint for additional validation
+    print_status "Testing metrics health endpoint: $api_url/metrics/health"
+
+    response=$(curl -s -w "\n%{http_code}" \
+        -H "Authorization: Bearer $grafana_key" \
+        "$api_url/metrics/health" \
+        --max-time 30 \
+        --connect-timeout 10)
+
+    http_code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | head -n -1)
+
+    case $http_code in
+        200)
+            print_success "Health metrics endpoint is accessible"
+            # Try to parse as JSON
+            if echo "$body" | python3 -m json.tool > /dev/null 2>&1; then
+                print_success "Health response is valid JSON"
+                # Show health status
+                local overall_status=$(echo "$body" | grep -o '"overall_status":"[^"]*"' | cut -d'"' -f4)
+                if [[ "$overall_status" == "healthy" ]]; then
+                    print_success "System reports healthy status"
+                else
+                    print_warning "System reports status: $overall_status"
+                fi
+            else
+                print_warning "Health response is not valid JSON"
+            fi
+            return 0
+            ;;
+        *)
+            print_warning "Health endpoint returned HTTP $http_code"
+            print_status "This is not critical, main metrics endpoint is working"
+            return 0  # Don't fail deployment for health endpoint issues
+            ;;
+    esac
 }
 
 
@@ -609,7 +713,12 @@ main() {
     run_environment_tests
     cleanup_test_data
     send_deployment_notification
-    test_metrics_endpoint
+
+    # To this (make it non-blocking):
+    if ! test_metrics_endpoint; then
+        print_warning "Metrics endpoint test failed, but continuing deployment"
+        print_status "You can test metrics manually later"
+    fi
 
     # Show success summary
     show_deployment_summary

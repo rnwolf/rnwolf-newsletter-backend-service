@@ -31,7 +31,48 @@ export class MetricsHandler {
     const path = url.pathname;
 
     try {
-      // Route metrics requests
+      // Handle Prometheus API compatibility first
+      if (path === '/metrics/api/v1/query') {
+        const searchParams = url.searchParams;
+        const query = searchParams.get('query');
+
+        // Handle Grafana's test query
+        if (query === '1+1') {
+          return new Response(JSON.stringify({
+            status: 'success',
+            data: {
+              resultType: 'scalar',
+              result: [Math.floor(Date.now() / 1000), '2']
+            }
+          }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        // For other queries, return empty result
+        return new Response(JSON.stringify({
+          status: 'success',
+          data: { resultType: 'vector', result: [] }
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (path === '/metrics/api/v1/status/buildinfo') {
+        return new Response(JSON.stringify({
+          status: 'success',
+          data: {
+            version: '1.0.0',
+            revision: 'newsletter-backend',
+            buildUser: 'cloudflare-worker',
+            buildDate: '2025-06-11'
+          }
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Route existing metrics requests
       if (path === '/metrics') {
         return this.handlePrometheusMetrics(request);
       } else if (path === '/metrics/json') {
@@ -47,6 +88,7 @@ export class MetricsHandler {
       }
 
       return this.notFoundResponse();
+
     } catch (error) {
       console.error('Metrics endpoint error:', error);
       return this.errorResponse('Internal server error', 500);

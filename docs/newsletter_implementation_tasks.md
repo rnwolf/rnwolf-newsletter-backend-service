@@ -322,6 +322,7 @@ Cleanup and consolidate and remove super seeded tests.
 - [ ] Rate limiting prevents abuse
 - [ ] CORS headers work correctly
 - [ ] OWASP testing
+- [ ] No Personally Identifiable Information (PII) in Log files
 
 ## Phase 6: Documentation and Deployment
 
@@ -370,6 +371,7 @@ Cleanup and consolidate and remove super seeded tests.
 **Miscellaneous**:
 - [ ] Remove debugging logging
 - [ ] Add troubleshooting content in MkDocs for turnstile issues
+- [ ] Go through the process of developing a breaking version of the Worker and all that will entail.
 
 ## Additional Recommendations
 
