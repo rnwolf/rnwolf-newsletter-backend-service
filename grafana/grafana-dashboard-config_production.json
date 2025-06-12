@@ -1,8 +1,8 @@
 {
   "dashboard": {
     "id": null,
-    "title": "Newsletter Backend Service - Performance & Observability (production)",
-    "tags": ["newsletter", "cloudflare-workers", "performance","production"],
+    "title": "Newsletter Backend Service - Performance & Observability (Production)",
+    "tags": ["newsletter", "cloudflare-workers", "performance", "production"],
     "uid": "newsletter-backend-prod",
     "timezone": "browser",
     "refresh": "30s",
@@ -17,13 +17,13 @@
         "type": "stat",
         "targets": [
           {
-            "expr": "newsletter_database_status",
-            "legendFormat": "Database Status",
+            "expr": "newsletter_subscribers_total",
+            "legendFormat": "Total Subscribers",
             "refId": "A"
           },
           {
-            "expr": "rate(newsletter_subscriptions[5m])",
-            "legendFormat": "Subscription Rate",
+            "expr": "newsletter_subscribers_active",
+            "legendFormat": "Active Subscribers",
             "refId": "B"
           }
         ],
@@ -35,41 +35,148 @@
             "thresholds": {
               "steps": [
                 {"color": "red", "value": 0},
-                {"color": "yellow", "value": 0.8},
-                {"color": "green", "value": 1}
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 5}
               ]
             }
           }
         },
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32}
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
       },
       {
-        "id": 9,
-        "title": "Worker Memory Usage",
+        "id": 2,
+        "title": "Newsletter Subscription Activity",
         "type": "graph",
         "targets": [
           {
-            "expr": "worker_memory_used / worker_memory_total * 100",
-            "legendFormat": "Memory Usage %",
+            "expr": "newsletter_subscriptions_24h",
+            "legendFormat": "Subscriptions (24h)",
+            "refId": "A"
+          },
+          {
+            "expr": "newsletter_unsubscribes_24h",
+            "legendFormat": "Unsubscribes (24h)",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Count",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Database Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up",
+            "legendFormat": "Service Status",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {"text": "Down"},
+                  "1": {"text": "Up"}
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Subscriber Growth",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "newsletter_subscribers_total",
+            "legendFormat": "Total Subscribers",
+            "refId": "A"
+          },
+          {
+            "expr": "newsletter_subscribers_active",
+            "legendFormat": "Active Subscribers",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 5,
+        "title": "Recent Activity",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "newsletter_subscriptions_24h",
+            "legendFormat": "New Subscriptions",
             "refId": "A"
           }
         ],
         "yAxes": [
           {
-            "label": "Percentage",
-            "min": 0,
-            "max": 100
+            "label": "Count",
+            "min": 0
           }
         ],
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32}
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "System Metrics",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "newsletter_subscribers_total",
+            "legendFormat": "Total Subscribers",
+            "refId": "A",
+            "instant": true
+          },
+          {
+            "expr": "newsletter_subscribers_active",
+            "legendFormat": "Active Subscribers",
+            "refId": "B",
+            "instant": true
+          },
+          {
+            "expr": "newsletter_subscriptions_24h",
+            "legendFormat": "Subscriptions (24h)",
+            "refId": "C",
+            "instant": true
+          },
+          {
+            "expr": "newsletter_unsubscribes_24h",
+            "legendFormat": "Unsubscribes (24h)",
+            "refId": "D",
+            "instant": true
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
       }
     ],
     "templating": {
       "list": [
         {
           "name": "environment",
-          "type": "query",
-          "query": "label_values(environment)",
+          "type": "constant",
           "current": {
             "value": "production",
             "text": "production"
@@ -78,16 +185,7 @@
       ]
     },
     "annotations": {
-      "list": [
-        {
-          "name": "Deployments",
-          "datasource": "-- Grafana --",
-          "enable": true,
-          "iconColor": "green",
-          "query": "deployment",
-          "type": "tags"
-        }
-      ]
+      "list": []
     }
   },
   "datasource_config": {
@@ -103,174 +201,5 @@
     "secureJsonData": {
       "httpHeaderValue1": "Bearer glsa_YOUR_PRODUCTION_TOKEN_HERE"
     }
-  },
-  "alerting_rules": [
-    {
-      "name": "High Error Rate",
-      "condition": "rate(http_errors_total[5m]) > 0.1",
-      "severity": "warning",
-      "description": "Error rate is above 10% for 5 minutes"
-    },
-    {
-      "name": "High Response Time",
-      "condition": "histogram_quantile(0.95, rate(http_request_duration_bucket[5m])) > 2000",
-      "severity": "warning",
-      "description": "95th percentile response time is above 2 seconds"
-    },
-    {
-      "name": "Database Connection Failed",
-      "condition": "database_health_status == 0",
-      "severity": "critical",
-      "description": "Database health check is failing"
-    },
-    {
-      "name": "Low Subscription Rate",
-      "condition": "rate(newsletter_subscriptions[1h]) < 0.001",
-      "severity": "info",
-      "description": "Subscription rate is unusually low"
-    }
-  ]
-}y": 0}
-      },
-      {
-        "id": 2,
-        "title": "HTTP Request Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(http_requests_total[5m])",
-            "legendFormat": "{{method}} {{path}}",
-            "refId": "A"
-          }
-        ],
-        "yAxes": [
-          {
-            "label": "Requests/sec",
-            "min": 0
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
-      },
-      {
-        "id": 3,
-        "title": "Response Time Percentiles",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.50, rate(http_request_duration_bucket[5m]))",
-            "legendFormat": "p50",
-            "refId": "A"
-          },
-          {
-            "expr": "histogram_quantile(0.95, rate(http_request_duration_bucket[5m]))",
-            "legendFormat": "p95",
-            "refId": "B"
-          },
-          {
-            "expr": "histogram_quantile(0.99, rate(http_request_duration_bucket[5m]))",
-            "legendFormat": "p99",
-            "refId": "C"
-          }
-        ],
-        "yAxes": [
-          {
-            "label": "Response Time (ms)",
-            "min": 0
-          }
-        ],
-        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
-      },
-      {
-        "id": 4,
-        "title": "Newsletter Subscription Metrics",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "newsletter_subscribers_total",
-            "legendFormat": "Total Subscribers",
-            "refId": "A"
-          },
-          {
-            "expr": "newsletter_subscribers_active",
-            "legendFormat": "Active Subscribers",
-            "refId": "B"
-          },
-          {
-            "expr": "rate(newsletter_subscriptions[1h])",
-            "legendFormat": "Hourly Subscription Rate",
-            "refId": "C"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
-      },
-      {
-        "id": 5,
-        "title": "Error Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(http_errors_total[5m])",
-            "legendFormat": "{{error_type}}",
-            "refId": "A"
-          }
-        ],
-        "yAxes": [
-          {
-            "label": "Errors/sec",
-            "min": 0
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
-      },
-      {
-        "id": 6,
-        "title": "Database Performance",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "database_health_response_time",
-            "legendFormat": "DB Response Time",
-            "refId": "A"
-          },
-          {
-            "expr": "rate(database_errors[5m])",
-            "legendFormat": "DB Errors/sec",
-            "refId": "B"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
-      },
-      {
-        "id": 7,
-        "title": "Turnstile Verification Metrics",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(newsletter_turnstile_verifications[5m])",
-            "legendFormat": "{{result}}",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
-      },
-      {
-        "id": 8,
-        "title": "Geographic Distribution",
-        "type": "piechart",
-        "targets": [
-          {
-            "expr": "sum by (country) (newsletter_subscriptions)",
-            "legendFormat": "{{country}}",
-            "refId": "A"
-          }
-        ],
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 40
-        }
-      }
-    ]
   }
 }

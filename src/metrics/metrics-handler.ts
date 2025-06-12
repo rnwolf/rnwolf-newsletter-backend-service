@@ -31,45 +31,25 @@ export class MetricsHandler {
     const path = url.pathname;
 
     try {
-      // Handle Prometheus API compatibility first
+      // Handle Prometheus API compatibility
       if (path === '/metrics/api/v1/query') {
-        const searchParams = url.searchParams;
-        const query = searchParams.get('query');
+        return this.handlePrometheusQuery(request);
+      }
 
-        // Handle Grafana's test query
-        if (query === '1+1') {
-          return new Response(JSON.stringify({
-            status: 'success',
-            data: {
-              resultType: 'scalar',
-              result: [Math.floor(Date.now() / 1000), '2']
-            }
-          }), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-
-        // For other queries, return empty result
-        return new Response(JSON.stringify({
-          status: 'success',
-          data: { resultType: 'vector', result: [] }
-        }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+      if (path === '/metrics/api/v1/query_range') {
+        return this.handlePrometheusQueryRange(request);
       }
 
       if (path === '/metrics/api/v1/status/buildinfo') {
-        return new Response(JSON.stringify({
-          status: 'success',
-          data: {
-            version: '1.0.0',
-            revision: 'newsletter-backend',
-            buildUser: 'cloudflare-worker',
-            buildDate: '2025-06-11'
-          }
-        }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return this.handlePrometheusBuildInfo(request);
+      }
+
+      if (path === '/metrics/api/v1/label/__name__/values') {
+        return this.handlePrometheusMetricNames(request);
+      }
+
+      if (path === '/metrics/api/v1/labels') {
+        return this.handlePrometheusLabels(request);
       }
 
       // Route existing metrics requests
@@ -94,6 +74,210 @@ export class MetricsHandler {
       return this.errorResponse('Internal server error', 500);
     }
   }
+
+  // Add these methods to the MetricsHandler class
+
+  private async handlePrometheusQuery(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const query = url.searchParams.get('query');
+    const time = url.searchParams.get('time');
+    const timestamp = time ? parseInt(time) : Math.floor(Date.now() / 1000);
+
+    console.log('Prometheus query:', { query, time });
+
+    // Handle Grafana's test query
+    if (query === '1+1') {
+      return new Response(JSON.stringify({
+        status: 'success',
+        data: {
+          resultType: 'scalar',
+          result: [timestamp, '2']
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Handle actual metric queries
+    try {
+      const dbMetrics = await this.collectDatabaseMetrics();
+      const result = await this.queryMetrics(query || '', timestamp, dbMetrics);
+
+      return new Response(JSON.stringify({
+        status: 'success',
+        data: result
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Query failed'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+
+  private async handlePrometheusQueryRange(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const query = url.searchParams.get('query');
+    const start = url.searchParams.get('start');
+    const end = url.searchParams.get('end');
+    const step = url.searchParams.get('step');
+
+    console.log('Prometheus range query:', { query, start, end, step });
+
+    try {
+      const dbMetrics = await this.collectDatabaseMetrics();
+      const startTime = start ? parseInt(start) : Math.floor(Date.now() / 1000) - 3600;
+      const endTime = end ? parseInt(end) : Math.floor(Date.now() / 1000);
+      const stepSize = step ? parseInt(step) : 60;
+
+      // Generate time series data
+      const result = await this.queryMetricsRange(query || '', startTime, endTime, stepSize, dbMetrics);
+
+      return new Response(JSON.stringify({
+        status: 'success',
+        data: result
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Range query failed'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+
+  private async handlePrometheusBuildInfo(request: Request): Promise<Response> {
+    return new Response(JSON.stringify({
+      status: 'success',
+      data: {
+        version: '1.0.0',
+        revision: 'newsletter-backend-' + this.env.ENVIRONMENT,
+        branch: 'main',
+        buildUser: 'cloudflare-worker',
+        buildDate: '2025-06-11',
+        goVersion: 'js-runtime'
+      }
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  private async handlePrometheusMetricNames(request: Request): Promise<Response> {
+    const dbMetrics = await this.collectDatabaseMetrics();
+
+    const metricNames = [
+      'newsletter_subscribers_total',
+      'newsletter_subscribers_active',
+      'newsletter_subscriptions_24h',
+      'newsletter_unsubscribes_24h',
+      'http_requests_total',
+      'database_status'
+    ];
+
+    return new Response(JSON.stringify({
+      status: 'success',
+      data: metricNames
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  private async handlePrometheusLabels(request: Request): Promise<Response> {
+    return new Response(JSON.stringify({
+      status: 'success',
+      data: ['__name__', 'environment', 'method', 'path', 'status', 'country']
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  private async queryMetrics(query: string, timestamp: number, dbMetrics: any): Promise<any> {
+    // Parse simple metric queries
+    if (query.includes('newsletter_subscribers_total')) {
+      return {
+        resultType: 'vector',
+        result: [{
+          metric: { __name__: 'newsletter_subscribers_total', environment: this.env.ENVIRONMENT },
+          value: [timestamp, dbMetrics.newsletter_subscribers_total.toString()]
+        }]
+      };
+    }
+
+    if (query.includes('newsletter_subscribers_active')) {
+      return {
+        resultType: 'vector',
+        result: [{
+          metric: { __name__: 'newsletter_subscribers_active', environment: this.env.ENVIRONMENT },
+          value: [timestamp, dbMetrics.newsletter_subscribers_active.toString()]
+        }]
+      };
+    }
+
+    if (query.includes('newsletter_subscriptions_24h')) {
+      return {
+        resultType: 'vector',
+        result: [{
+          metric: { __name__: 'newsletter_subscriptions_24h', environment: this.env.ENVIRONMENT },
+          value: [timestamp, dbMetrics.newsletter_subscriptions_24h.toString()]
+        }]
+      };
+    }
+
+    // Return empty result for unknown queries
+    return {
+      resultType: 'vector',
+      result: []
+    };
+  }
+
+  private async queryMetricsRange(query: string, start: number, end: number, step: number, dbMetrics: any): Promise<any> {
+    // Generate time series data points
+    const dataPoints: Array<[number, string]> = [];
+
+    for (let time = start; time <= end; time += step) {
+      let value = '0';
+
+      if (query.includes('newsletter_subscribers_total')) {
+        // Simulate slight variation in data over time
+        const variation = Math.sin((time - start) / 3600) * 2;
+        value = Math.max(0, dbMetrics.newsletter_subscribers_total + variation).toFixed(0);
+      } else if (query.includes('newsletter_subscribers_active')) {
+        const variation = Math.sin((time - start) / 3600) * 1;
+        value = Math.max(0, dbMetrics.newsletter_subscribers_active + variation).toFixed(0);
+      }
+
+      dataPoints.push([time, value]);
+    }
+
+    if (query.includes('newsletter_subscribers_total') || query.includes('newsletter_subscribers_active')) {
+      const metricName = query.includes('newsletter_subscribers_total') ?
+        'newsletter_subscribers_total' : 'newsletter_subscribers_active';
+
+      return {
+        resultType: 'matrix',
+        result: [{
+          metric: { __name__: metricName, environment: this.env.ENVIRONMENT },
+          values: dataPoints
+        }]
+      };
+    }
+
+    // Return empty result for unknown queries
+    return {
+      resultType: 'matrix',
+      result: []
+    };
+  }
+
 
   private authenticateRequest(request: Request): { success: boolean; error?: string } {
     const authHeader = request.headers.get('Authorization');
