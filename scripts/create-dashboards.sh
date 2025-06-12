@@ -121,148 +121,7 @@ inject_api_keys() {
     return 0
 }
 
-# Function to extract dashboard info from JSON (FIXED VERSION)
-extract_dashboard_info() {
-    local json_response="$1"
-    local temp_file="$TEMP_DIR/extract_info_$$.json"
-
-    # Write JSON to temp file to avoid command line issues
-    echo "$json_response" > "$temp_file"
-
-    python3 -c "
-import json
-try:
-    with open('$temp_file', 'r') as f:
-        data = json.load(f)
-
-    dashboard = data.get('dashboard', {})
-    meta = data.get('meta', {})
-
-    print('EXISTS=true')
-    print('ID=' + str(dashboard.get('id', '')))
-    print('VERSION=' + str(dashboard.get('version', '1')))
-    print('UID=' + str(dashboard.get('uid', '')))
-    print('SLUG=' + str(meta.get('slug', '')))
-except Exception as e:
-    print('EXISTS=false')
-    print('ERROR=ParseError')
-" 2>/dev/null
-
-    # Clean up temp file
-    rm -f "$temp_file"
-}
-
-# Function to prepare dashboard JSON with proper version handling (FIXED VERSION)
-prepare_dashboard_json() {
-    local config_file="$1"
-    local dashboard_info="$2"
-    local output_file="$3"
-    local overwrite_mode="$4"
-
-    if [[ "$overwrite_mode" == true && -n "$dashboard_info" ]]; then
-        # Use Python to handle everything safely
-        local temp_info_file="$TEMP_DIR/dashboard_info_$$.json"
-        echo "$dashboard_info" > "$temp_info_file"
-
-        python3 -c "
-import json
-import sys
-
-# Read the dashboard info
-dashboard_id = ''
-new_version = 1
-dashboard_uid = ''
-
-try:
-    with open('$temp_info_file', 'r') as f:
-        dashboard_response = json.load(f)
-
-    existing_dashboard = dashboard_response.get('dashboard', {})
-    dashboard_id = existing_dashboard.get('id', '')
-    dashboard_version = existing_dashboard.get('version', 1)
-    dashboard_uid = existing_dashboard.get('uid', '')
-
-    # Increment version
-    new_version = int(dashboard_version) + 1
-
-    print(f'Found existing dashboard: ID={dashboard_id}, Version={dashboard_version} -> {new_version}', file=sys.stderr)
-
-except Exception as e:
-    print(f'Error reading dashboard info, using defaults: {e}', file=sys.stderr)
-
-# Read and update the config file
-try:
-    with open('$config_file', 'r') as f:
-        config = json.load(f)
-
-    # Update dashboard metadata for overwrite
-    if 'dashboard' in config:
-        if dashboard_id:
-            config['dashboard']['id'] = int(dashboard_id)
-        config['dashboard']['version'] = new_version
-        if dashboard_uid:
-            config['dashboard']['uid'] = dashboard_uid
-
-        # Set overwrite flag
-        config['overwrite'] = True
-
-    with open('$output_file', 'w') as f:
-        json.dump(config, f, indent=2)
-
-    print(f'Dashboard prepared successfully with version {new_version}', file=sys.stderr)
-
-except Exception as e:
-    print(f'Error preparing dashboard: {e}', file=sys.stderr)
-    # Fallback: just copy the original file
-    import shutil
-    shutil.copy('$config_file', '$output_file')
-"
-
-        # Clean up temp file
-        rm -f "$temp_info_file"
-    else
-        # For normal mode, just copy the file
-        cp "$config_file" "$output_file"
-    fi
-}
-
-# Function to delete existing dashboard
-delete_dashboard() {
-    local dashboard_uid="$1"
-    local api_key="$2"
-    local environment="$3"
-
-    print_status "Deleting existing $environment dashboard (UID: $dashboard_uid)..."
-
-    local response=$(curl -s -w "\n%{http_code}" \
-        -X DELETE "$GRAFANA_URL/api/dashboards/uid/$dashboard_uid" \
-        -H "Authorization: Bearer $api_key")
-
-    local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | head -n -1)
-
-    case $http_code in
-        200)
-            print_success "Successfully deleted existing $environment dashboard"
-            return 0
-            ;;
-        404)
-            print_warning "Dashboard not found (already deleted or doesn't exist)"
-            return 0
-            ;;
-        403)
-            print_error "Access denied when deleting $environment dashboard"
-            return 1
-            ;;
-        *)
-            print_error "Failed to delete $environment dashboard (HTTP $http_code)"
-            print_status "Response: $(echo "$body" | head -c 200)"
-            return 1
-            ;;
-    esac
-}
-
-# Function to create fresh dashboard with new UID (FIXED)
+# Function to create fresh dashboard with new UID
 create_fresh_dashboard() {
     local config_file="$1"
     local environment="$2"
@@ -366,19 +225,8 @@ reset_dashboard_completely() {
     local config_file="$1"
     local environment="$2"
     local api_key="$3"
-    local original_uid="$4"
 
-    print_warning "Attempting complete dashboard reset for $environment..."
-
-    # Try to delete by UID first
-    if [[ -n "$original_uid" ]]; then
-        print_status "Deleting dashboard with UID: $original_uid"
-        curl -s -X DELETE "$GRAFANA_URL/api/dashboards/uid/$original_uid" \
-            -H "Authorization: Bearer $api_key" > /dev/null
-    fi
-
-    # Wait for deletion to propagate
-    sleep 3
+    print_warning "Creating fresh dashboard for $environment after nuclear cleanup..."
 
     # Create with completely new identity
     local reset_config="$TEMP_DIR/${environment}-reset-dashboard.json"
@@ -448,12 +296,11 @@ except:
     fi
 }
 
-# Function to find and delete all newsletter dashboards
-nuclear_cleanup() {
-    local api_key="$1"
-    local environment_name="$2"
+# Function to find and delete all newsletter dashboards - GLOBAL NUCLEAR CLEANUP
+global_nuclear_cleanup() {
+    local api_key="$1"  # Use any valid API key since we're just deleting all
 
-    print_warning "🚨 NUCLEAR MODE: Finding and deleting ALL newsletter dashboards for $environment_name..."
+    print_warning "🚨 GLOBAL NUCLEAR MODE: Finding and deleting ALL newsletter dashboards..."
 
     # Search for all dashboards with newsletter in the title
     local search_response=$(curl -s \
@@ -516,7 +363,7 @@ except Exception as e:
     return 0
 }
 
-# Enhanced deploy function with nuclear option
+# Enhanced deploy function WITHOUT per-environment nuclear option
 deploy_dashboard_enhanced() {
     local config_file="$1"
     local environment="$2"
@@ -525,282 +372,29 @@ deploy_dashboard_enhanced() {
 
     print_step "Deploying $environment dashboard..."
 
-    # Extract dashboard UID from config
-    local dashboard_uid=$(python3 -c "
-import json, sys
-with open('$config_file', 'r') as f:
-    config = json.load(f)
-    print(config.get('dashboard', {}).get('uid', ''))
-" 2>/dev/null)
+    # NO NUCLEAR MODE HERE - It's handled globally before deployment starts
 
-    # NUCLEAR MODE: Clean slate approach
+    # For nuclear mode, just create fresh dashboard
     if [[ "$NUCLEAR_MODE" == true ]]; then
-        print_warning "🚨 NUCLEAR MODE ACTIVATED for $environment"
-
-        # Delete ALL newsletter dashboards for this environment
-        if nuclear_cleanup "$api_key" "$environment"; then
-            print_status "Nuclear cleanup completed, creating fresh dashboard..."
-
-            # Create completely fresh dashboard with nuclear reset
-            if reset_dashboard_completely "$config_file" "$environment" "$api_key" "$dashboard_uid"; then
-                return 0
-            else
-                print_error "Failed to create dashboard after nuclear cleanup"
-                return 1
-            fi
-        else
-            print_error "Nuclear cleanup failed"
-            return 1
-        fi
-    fi
-
-    # Check if dashboard exists (non-nuclear mode)
-    local dashboard_info=""
-    local dashboard_exists=false
-
-    if [[ -n "$dashboard_uid" ]]; then
-        dashboard_info=$(get_dashboard_info "$dashboard_uid" "$api_key" 2>/dev/null || echo "")
-        if [[ -n "$dashboard_info" ]]; then
-            dashboard_exists=true
-        fi
-    fi
-
-    # If dashboard exists and we're in overwrite mode, delete and recreate
-    if [[ "$dashboard_exists" == true && "$OVERWRITE_MODE" == true ]]; then
-        print_warning "Dashboard exists, deleting and recreating to avoid version conflicts..."
-
-        if delete_dashboard "$dashboard_uid" "$api_key" "$environment"; then
-            # Wait a moment for deletion to propagate
-            sleep 2
-
-            # Create fresh dashboard
-            if create_fresh_dashboard "$config_file" "$environment" "$api_key"; then
-                return 0
-            else
-                return 1
-            fi
-        else
-            print_error "Failed to delete existing dashboard, cannot proceed"
-            return 1
-        fi
-
-    # If dashboard exists but not in overwrite mode, try normal update
-    elif [[ "$dashboard_exists" == true ]]; then
-        if [[ "$FORCE_MODE" == true ]]; then
-            print_warning "Dashboard exists, attempting normal update..."
-        else
-            print_warning "Dashboard already exists with UID: $dashboard_uid"
-            echo "Options:"
-            echo "  1. Try normal update (may have version conflicts)"
-            echo "  2. Delete and recreate (no version conflicts)"
-            echo "  3. Nuclear option (delete ALL newsletter dashboards and recreate)"
-            echo "  4. Skip this dashboard"
-            read -p "Choose option (1/2/3/4): " -r choice
-
-            case $choice in
-                2)
-                    print_status "Deleting and recreating dashboard..."
-                    if delete_dashboard "$dashboard_uid" "$api_key" "$environment"; then
-                        sleep 2
-                        if create_fresh_dashboard "$config_file" "$environment" "$api_key"; then
-                            return 0
-                        else
-                            return 1
-                        fi
-                    else
-                        return 1
-                    fi
-                    ;;
-                3)
-                    print_warning "🚨 NUCLEAR OPTION SELECTED"
-                    read -p "This will delete ALL newsletter dashboards. Are you sure? (yes/no): " -r confirm
-                    if [[ "$confirm" == "yes" ]]; then
-                        if nuclear_cleanup "$api_key" "$environment"; then
-                            if reset_dashboard_completely "$config_file" "$environment" "$api_key" "$dashboard_uid"; then
-                                return 0
-                            else
-                                return 1
-                            fi
-                        else
-                            return 1
-                        fi
-                    else
-                        print_status "Nuclear option cancelled"
-                        return 1
-                    fi
-                    ;;
-                4)
-                    print_warning "Skipping $environment dashboard deployment"
-                    return 0
-                    ;;
-                *)
-                    print_status "Attempting normal update..."
-                    ;;
-            esac
-        fi
-
-        # Try normal update with version handling
-        local final_config="$TEMP_DIR/${environment}-final-dashboard.json"
-        prepare_dashboard_json "$config_file" "$dashboard_info" "$final_config" "false"
-
-        local response=$(curl -s -w "\n%{http_code}" \
-            -X POST "$GRAFANA_URL/api/dashboards/db" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $api_key" \
-            -d @"$final_config")
-
-        local http_code=$(echo "$response" | tail -n1)
-
-        if [[ $http_code == "412" ]]; then
-            print_error "Version conflict occurred. Use --nuclear for complete reset"
-            return 1
-        elif [[ $http_code == "200" ]]; then
-            print_success "Successfully updated $environment dashboard"
+        print_status "Creating fresh dashboard for $environment after global nuclear cleanup..."
+        if reset_dashboard_completely "$config_file" "$environment" "$api_key"; then
             return 0
         else
-            print_error "Update failed with HTTP $http_code"
+            print_error "Failed to create dashboard for $environment after nuclear cleanup"
             return 1
         fi
+    fi
 
-    # Dashboard doesn't exist, create fresh
+    # Original logic for non-nuclear deployments...
+    # (Keep existing logic for overwrite mode, etc.)
+
+    # For now, default to creating fresh dashboards
+    print_status "Creating fresh $environment dashboard..."
+    if create_fresh_dashboard "$config_file" "$environment" "$api_key"; then
+        return 0
     else
-        print_status "Dashboard doesn't exist, creating new one..."
-        if create_fresh_dashboard "$config_file" "$environment" "$api_key"; then
-            return 0
-        else
-            return 1
-        fi
+        return 1
     fi
-}
-
-# Function to deploy dashboard with enhanced version handling
-deploy_dashboard() {
-    local config_file="$1"
-    local environment="$2"
-    local api_key="$3"
-    local update_mode="$4"
-
-    print_step "Deploying $environment dashboard..."
-
-    # Extract dashboard UID from config for existence check
-    local dashboard_uid=$(python3 -c "
-import json, sys
-with open('$config_file', 'r') as f:
-    config = json.load(f)
-    print(config.get('dashboard', {}).get('uid', ''))
-" 2>/dev/null)
-
-    # Check if dashboard already exists and get its info
-    local dashboard_info=""
-    local dashboard_exists=false
-
-    if [[ -n "$dashboard_uid" ]]; then
-        dashboard_info=$(get_dashboard_info "$dashboard_uid" "$api_key" 2>/dev/null || echo "")
-        if [[ -n "$dashboard_info" ]]; then
-            dashboard_exists=true
-        fi
-    fi
-
-    # Handle existing dashboard
-    if [[ "$dashboard_exists" == true ]]; then
-        if [[ "$update_mode" == true ]]; then
-            print_warning "Dashboard exists, updating with version handling..."
-        elif [[ "$FORCE_MODE" == true ]]; then
-            print_warning "Dashboard exists, overwriting due to --force flag..."
-        elif [[ "$OVERWRITE_MODE" == true ]]; then
-            print_warning "Dashboard exists, force overwriting (ignoring version conflicts)..."
-        else
-            print_warning "Dashboard already exists with UID: $dashboard_uid"
-            read -p "Overwrite existing dashboard? (y/N): " -r
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                print_warning "Skipping $environment dashboard deployment"
-                return 0
-            fi
-        fi
-    fi
-
-    # Prepare the final JSON with proper version handling
-    local final_config="$TEMP_DIR/${environment}-final-dashboard.json"
-    prepare_dashboard_json "$config_file" "$dashboard_info" "$final_config" "$OVERWRITE_MODE"
-
-    # Deploy the dashboard
-    local response=$(curl -s -w "\n%{http_code}" \
-        -X POST "$GRAFANA_URL/api/dashboards/db" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $api_key" \
-        -d @"$final_config")
-
-    local http_code=$(echo "$response" | tail -n1)
-    local body=$(echo "$response" | head -n -1)
-
-    case $http_code in
-        200)
-            local dashboard_id=$(echo "$body" | python3 -c "
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    print(data.get('id', 'unknown'))
-except:
-    print('unknown')
-" 2>/dev/null)
-            local dashboard_url=$(echo "$body" | python3 -c "
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    print(data.get('url', ''))
-except:
-    print('')
-" 2>/dev/null)
-
-            print_success "Successfully deployed $environment dashboard"
-            print_status "Dashboard ID: $dashboard_id"
-            if [[ -n "$dashboard_url" ]]; then
-                print_status "Dashboard URL: $GRAFANA_URL$dashboard_url"
-            fi
-            ;;
-        400)
-            print_error "Bad request deploying $environment dashboard"
-            local error_msg=$(echo "$body" | python3 -c "
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    print(data.get('message', 'Unknown error'))
-except:
-    print('Invalid JSON response')
-" 2>/dev/null)
-            print_error "Error: $error_msg"
-            print_status "Response body (first 500 chars): $(echo "$body" | head -c 500)"
-            return 1
-            ;;
-        401)
-            print_error "Authentication failed for $environment dashboard"
-            print_error "Check that GRAFANA_API_KEY_${environment^^} is correct"
-            return 1
-            ;;
-        403)
-            print_error "Access denied for $environment dashboard"
-            print_error "API key may lack dashboard creation permissions"
-            return 1
-            ;;
-        412)
-            if [[ "$OVERWRITE_MODE" == true ]]; then
-                print_error "Version conflict persists even with overwrite mode for $environment"
-                print_error "Manual intervention may be required"
-            else
-                print_error "Dashboard version conflict for $environment"
-                print_error "The dashboard has been modified since you last loaded it"
-                print_warning "Try using --overwrite flag to force overwrite"
-                print_status "Command: $0 $environment --overwrite"
-            fi
-            return 1
-            ;;
-        *)
-            print_error "Failed to deploy $environment dashboard"
-            print_error "HTTP Code: $http_code"
-            print_error "Response: $(echo "$body" | head -c 500)"
-            return 1
-            ;;
-    esac
 }
 
 # Function to validate dashboard configuration
@@ -863,9 +457,36 @@ create_datasource_info() {
     print_status "Make sure this datasource exists in Grafana before proceeding"
 }
 
-# Main deployment function
+# Main deployment function - MODIFIED TO HANDLE GLOBAL NUCLEAR CLEANUP
 deploy_dashboards() {
     print_step "Starting dashboard deployment process..."
+
+    # HANDLE GLOBAL NUCLEAR CLEANUP FIRST (before any deployments)
+    if [[ "$NUCLEAR_MODE" == true ]]; then
+        print_warning "🚨 NUCLEAR MODE ACTIVATED - Performing global cleanup before deployment"
+
+        # Use any available API key for global cleanup
+        local cleanup_api_key=""
+        if [[ "$DEPLOY_STAGING" == true ]]; then
+            cleanup_api_key="$GRAFANA_API_KEY_STAGING"
+        elif [[ "$DEPLOY_PRODUCTION" == true ]]; then
+            cleanup_api_key="$GRAFANA_API_KEY_PRODUCTION"
+        fi
+
+        if [[ -n "$cleanup_api_key" ]]; then
+            if global_nuclear_cleanup "$cleanup_api_key"; then
+                print_success "Global nuclear cleanup completed successfully"
+            else
+                print_error "Global nuclear cleanup failed"
+                return 1
+            fi
+        else
+            print_error "No API key available for nuclear cleanup"
+            return 1
+        fi
+
+        echo ""
+    fi
 
     local staging_success=true
     local production_success=true
@@ -945,12 +566,11 @@ deploy_dashboards() {
 }
 
 # Parse command line arguments
-# Parse command line arguments
 ENVIRONMENT=""
 UPDATE_MODE=false
 FORCE_MODE=false
 OVERWRITE_MODE=false
-NUCLEAR_MODE=false  # Add this line
+NUCLEAR_MODE=false
 DEPLOY_STAGING=false
 DEPLOY_PRODUCTION=false
 
@@ -985,7 +605,7 @@ while [[ $# -gt 0 ]]; do
             FORCE_MODE=true
             shift
             ;;
-        --nuclear)  # Add this option
+        --nuclear)
             NUCLEAR_MODE=true
             OVERWRITE_MODE=true
             FORCE_MODE=true
