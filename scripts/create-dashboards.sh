@@ -41,7 +41,7 @@ print_step() {
     echo -e "${BLUE}[STEP]${NC} $1"
 }
 
-# Function to show usage
+# Function to show usage information
 show_usage() {
     echo "Usage: $0 [staging|production|both] [OPTIONS]"
     echo ""
@@ -54,6 +54,7 @@ show_usage() {
     echo "  --update     Update existing dashboards instead of creating new ones"
     echo "  --force      Overwrite existing dashboards without confirmation"
     echo "  --overwrite  Force overwrite ignoring version conflicts"
+    echo "  --nuclear    Delete ALL existing dashboards and recreate (DESTRUCTIVE)"
     echo "  --help       Show this help message"
     echo ""
     echo "Examples:"
@@ -61,6 +62,9 @@ show_usage() {
     echo "  $0 production --update"
     echo "  $0 both --force"
     echo "  $0 production --overwrite  # Ignore version conflicts"
+    echo "  $0 both --nuclear          # Delete all and recreate"
+    echo ""
+    echo "WARNING: --nuclear will delete ALL newsletter dashboards and recreate them!"
     echo ""
 }
 
@@ -357,7 +361,162 @@ except:
     esac
 }
 
-# Enhanced deploy function with delete-and-recreate option
+# Function to completely reset dashboard (nuclear option)
+reset_dashboard_completely() {
+    local config_file="$1"
+    local environment="$2"
+    local api_key="$3"
+    local original_uid="$4"
+
+    print_warning "Attempting complete dashboard reset for $environment..."
+
+    # Try to delete by UID first
+    if [[ -n "$original_uid" ]]; then
+        print_status "Deleting dashboard with UID: $original_uid"
+        curl -s -X DELETE "$GRAFANA_URL/api/dashboards/uid/$original_uid" \
+            -H "Authorization: Bearer $api_key" > /dev/null
+    fi
+
+    # Wait for deletion to propagate
+    sleep 3
+
+    # Create with completely new identity
+    local reset_config="$TEMP_DIR/${environment}-reset-dashboard.json"
+    local timestamp=$(date +%s)
+    local new_uid="newsletter-${environment}-reset-${timestamp}"
+
+    python3 -c "
+import json
+
+with open('$config_file', 'r') as f:
+    config = json.load(f)
+
+# Completely reset dashboard identity
+if 'dashboard' in config:
+    # Remove all identity fields
+    config['dashboard'].pop('id', None)
+    config['dashboard'].pop('version', None)
+
+    # Generate completely new UID
+    config['dashboard']['uid'] = '$new_uid'
+
+    # Update title to show reset
+    original_title = config['dashboard'].get('title', '')
+    base_title = original_title.split(' (Reset')[0].split(' (Recreated')[0]
+    config['dashboard']['title'] = base_title + ' (Reset $timestamp)'
+
+# Force creation mode
+config['overwrite'] = False
+
+with open('$reset_config', 'w') as f:
+    json.dump(config, f, indent=2)
+"
+
+    print_status "Creating dashboard with reset UID: $new_uid"
+
+    # Deploy with new identity
+    local response=$(curl -s -w "\n%{http_code}" \
+        -X POST "$GRAFANA_URL/api/dashboards/db" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $api_key" \
+        -d @"$reset_config")
+
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | head -n -1)
+
+    if [[ $http_code == "200" ]]; then
+        print_success "Dashboard reset successful for $environment"
+        print_status "New UID: $new_uid"
+
+        local dashboard_url=$(echo "$body" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    print(data.get('url', ''))
+except:
+    print('')
+" 2>/dev/null)
+
+        if [[ -n "$dashboard_url" ]]; then
+            print_status "Dashboard URL: $GRAFANA_URL$dashboard_url"
+        fi
+        return 0
+    else
+        print_error "Dashboard reset failed (HTTP $http_code)"
+        print_status "Response: $(echo "$body" | head -c 500)"
+        return 1
+    fi
+}
+
+# Function to find and delete all newsletter dashboards
+nuclear_cleanup() {
+    local api_key="$1"
+    local environment_name="$2"
+
+    print_warning "🚨 NUCLEAR MODE: Finding and deleting ALL newsletter dashboards for $environment_name..."
+
+    # Search for all dashboards with newsletter in the title
+    local search_response=$(curl -s \
+        -H "Authorization: Bearer $api_key" \
+        "$GRAFANA_URL/api/search?query=newsletter&type=dash-db")
+
+    if [[ $? -ne 0 ]]; then
+        print_error "Failed to search for existing dashboards"
+        return 1
+    fi
+
+    # Extract UIDs of newsletter dashboards
+    local dashboard_uids=$(echo "$search_response" | python3 -c "
+import json, sys
+try:
+    dashboards = json.load(sys.stdin)
+    for dashboard in dashboards:
+        title = dashboard.get('title', '').lower()
+        uid = dashboard.get('uid', '')
+        if 'newsletter' in title and uid:
+            print(uid)
+except Exception as e:
+    pass
+")
+
+    if [[ -z "$dashboard_uids" ]]; then
+        print_status "No existing newsletter dashboards found"
+        return 0
+    fi
+
+    # Delete each found dashboard
+    local deleted_count=0
+    while IFS= read -r uid; do
+        if [[ -n "$uid" ]]; then
+            print_status "Deleting dashboard with UID: $uid"
+
+            local delete_response=$(curl -s -w "\n%{http_code}" \
+                -X DELETE "$GRAFANA_URL/api/dashboards/uid/$uid" \
+                -H "Authorization: Bearer $api_key")
+
+            local delete_http_code=$(echo "$delete_response" | tail -n1)
+
+            if [[ $delete_http_code == "200" ]]; then
+                print_success "✓ Deleted dashboard: $uid"
+                ((deleted_count++))
+            else
+                print_warning "⚠ Failed to delete dashboard: $uid (HTTP $delete_http_code)"
+            fi
+        fi
+    done <<< "$dashboard_uids"
+
+    print_success "Nuclear cleanup completed: $deleted_count dashboards deleted"
+
+    # Wait for deletions to propagate
+    if [[ $deleted_count -gt 0 ]]; then
+        print_status "Waiting 5 seconds for deletions to propagate..."
+        sleep 5
+    fi
+
+    return 0
+}
+
+# Enhanced deploy function with nuclear option
 deploy_dashboard_enhanced() {
     local config_file="$1"
     local environment="$2"
@@ -374,7 +533,28 @@ with open('$config_file', 'r') as f:
     print(config.get('dashboard', {}).get('uid', ''))
 " 2>/dev/null)
 
-    # Check if dashboard exists
+    # NUCLEAR MODE: Clean slate approach
+    if [[ "$NUCLEAR_MODE" == true ]]; then
+        print_warning "🚨 NUCLEAR MODE ACTIVATED for $environment"
+
+        # Delete ALL newsletter dashboards for this environment
+        if nuclear_cleanup "$api_key" "$environment"; then
+            print_status "Nuclear cleanup completed, creating fresh dashboard..."
+
+            # Create completely fresh dashboard with nuclear reset
+            if reset_dashboard_completely "$config_file" "$environment" "$api_key" "$dashboard_uid"; then
+                return 0
+            else
+                print_error "Failed to create dashboard after nuclear cleanup"
+                return 1
+            fi
+        else
+            print_error "Nuclear cleanup failed"
+            return 1
+        fi
+    fi
+
+    # Check if dashboard exists (non-nuclear mode)
     local dashboard_info=""
     local dashboard_exists=false
 
@@ -413,8 +593,9 @@ with open('$config_file', 'r') as f:
             echo "Options:"
             echo "  1. Try normal update (may have version conflicts)"
             echo "  2. Delete and recreate (no version conflicts)"
-            echo "  3. Skip this dashboard"
-            read -p "Choose option (1/2/3): " -r choice
+            echo "  3. Nuclear option (delete ALL newsletter dashboards and recreate)"
+            echo "  4. Skip this dashboard"
+            read -p "Choose option (1/2/3/4): " -r choice
 
             case $choice in
                 2)
@@ -431,6 +612,24 @@ with open('$config_file', 'r') as f:
                     fi
                     ;;
                 3)
+                    print_warning "🚨 NUCLEAR OPTION SELECTED"
+                    read -p "This will delete ALL newsletter dashboards. Are you sure? (yes/no): " -r confirm
+                    if [[ "$confirm" == "yes" ]]; then
+                        if nuclear_cleanup "$api_key" "$environment"; then
+                            if reset_dashboard_completely "$config_file" "$environment" "$api_key" "$dashboard_uid"; then
+                                return 0
+                            else
+                                return 1
+                            fi
+                        else
+                            return 1
+                        fi
+                    else
+                        print_status "Nuclear option cancelled"
+                        return 1
+                    fi
+                    ;;
+                4)
                     print_warning "Skipping $environment dashboard deployment"
                     return 0
                     ;;
@@ -453,7 +652,7 @@ with open('$config_file', 'r') as f:
         local http_code=$(echo "$response" | tail -n1)
 
         if [[ $http_code == "412" ]]; then
-            print_error "Version conflict occurred. Use --overwrite to delete and recreate"
+            print_error "Version conflict occurred. Use --nuclear for complete reset"
             return 1
         elif [[ $http_code == "200" ]]; then
             print_success "Successfully updated $environment dashboard"
@@ -746,10 +945,12 @@ deploy_dashboards() {
 }
 
 # Parse command line arguments
+# Parse command line arguments
 ENVIRONMENT=""
 UPDATE_MODE=false
 FORCE_MODE=false
 OVERWRITE_MODE=false
+NUCLEAR_MODE=false  # Add this line
 DEPLOY_STAGING=false
 DEPLOY_PRODUCTION=false
 
@@ -784,6 +985,12 @@ while [[ $# -gt 0 ]]; do
             FORCE_MODE=true
             shift
             ;;
+        --nuclear)  # Add this option
+            NUCLEAR_MODE=true
+            OVERWRITE_MODE=true
+            FORCE_MODE=true
+            shift
+            ;;
         --help)
             show_usage
             exit 0
@@ -809,7 +1016,6 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     export $(cat "$PROJECT_DIR/.env" | grep -v '^#' | xargs)
 fi
 
-# Main execution
 main() {
     echo "Grafana Dashboard Deployment"
     echo "============================"
@@ -839,6 +1045,21 @@ main() {
 
     if [[ "$OVERWRITE_MODE" == true ]]; then
         echo "Mode: Force overwrite ignoring version conflicts"
+    fi
+
+    if [[ "$NUCLEAR_MODE" == true ]]; then
+        echo "Mode: 🚨 NUCLEAR - Delete ALL newsletter dashboards and recreate"
+        echo ""
+        print_warning "⚠️  WARNING: Nuclear mode will delete ALL existing newsletter dashboards!"
+        print_warning "⚠️  This includes any custom modifications you may have made!"
+        echo ""
+        read -p "Are you absolutely sure you want to proceed? Type 'NUCLEAR' to confirm: " -r nuclear_confirm
+        if [[ "$nuclear_confirm" != "NUCLEAR" ]]; then
+            print_error "Nuclear mode confirmation failed. Aborting."
+            exit 1
+        fi
+        print_warning "Nuclear mode confirmed. Proceeding with dashboard destruction and recreation..."
+        echo ""
     fi
 
     echo ""
