@@ -75,8 +75,6 @@ export class MetricsHandler {
     }
   }
 
-  // Add these methods to the MetricsHandler class
-
   private async handlePrometheusQuery(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const query = url.searchParams.get('query');
@@ -172,14 +170,12 @@ export class MetricsHandler {
   }
 
   private async handlePrometheusMetricNames(request: Request): Promise<Response> {
-    const dbMetrics = await this.collectDatabaseMetrics();
-
     const metricNames = [
+      'up',
       'newsletter_subscribers_total',
       'newsletter_subscribers_active',
       'newsletter_subscriptions_24h',
       'newsletter_unsubscribes_24h',
-      'http_requests_total',
       'database_status'
     ];
 
@@ -201,12 +197,14 @@ export class MetricsHandler {
   }
 
   private async queryMetrics(query: string, timestamp: number, dbMetrics: any): Promise<any> {
+    const environment = this.env.ENVIRONMENT || 'local';
+
     // Handle the 'up' metric (standard Prometheus health check)
     if (query.includes('up')) {
       return {
         resultType: 'vector',
         result: [{
-          metric: { __name__: 'up', environment: this.env.ENVIRONMENT },
+          metric: { __name__: 'up', environment },
           value: [timestamp, '1']  // Always 1 if we're responding
         }]
       };
@@ -218,19 +216,18 @@ export class MetricsHandler {
       return {
         resultType: 'vector',
         result: [{
-          metric: { __name__: 'database_status', environment: this.env.ENVIRONMENT },
+          metric: { __name__: 'database_status', environment },
           value: [timestamp, statusValue]
         }]
       };
     }
-
 
     // Parse simple metric queries
     if (query.includes('newsletter_subscribers_total')) {
       return {
         resultType: 'vector',
         result: [{
-          metric: { __name__: 'newsletter_subscribers_total', environment: this.env.ENVIRONMENT },
+          metric: { __name__: 'newsletter_subscribers_total', environment },
           value: [timestamp, dbMetrics.newsletter_subscribers_total.toString()]
         }]
       };
@@ -240,7 +237,7 @@ export class MetricsHandler {
       return {
         resultType: 'vector',
         result: [{
-          metric: { __name__: 'newsletter_subscribers_active', environment: this.env.ENVIRONMENT },
+          metric: { __name__: 'newsletter_subscribers_active', environment },
           value: [timestamp, dbMetrics.newsletter_subscribers_active.toString()]
         }]
       };
@@ -250,8 +247,18 @@ export class MetricsHandler {
       return {
         resultType: 'vector',
         result: [{
-          metric: { __name__: 'newsletter_subscriptions_24h', environment: this.env.ENVIRONMENT },
+          metric: { __name__: 'newsletter_subscriptions_24h', environment },
           value: [timestamp, dbMetrics.newsletter_subscriptions_24h.toString()]
+        }]
+      };
+    }
+
+    if (query.includes('newsletter_unsubscribes_24h')) {
+      return {
+        resultType: 'vector',
+        result: [{
+          metric: { __name__: 'newsletter_unsubscribes_24h', environment },
+          value: [timestamp, dbMetrics.newsletter_unsubscribes_24h.toString()]
         }]
       };
     }
@@ -264,6 +271,8 @@ export class MetricsHandler {
   }
 
   private async queryMetricsRange(query: string, start: number, end: number, step: number, dbMetrics: any): Promise<any> {
+    const environment = this.env.ENVIRONMENT || 'local';
+
     // Generate time series data points
     const dataPoints: Array<[number, string]> = [];
 
@@ -316,7 +325,7 @@ export class MetricsHandler {
       return {
         resultType: 'matrix',
         result: [{
-          metric: { __name__: metricName, environment: this.env.ENVIRONMENT },
+          metric: { __name__: metricName, environment },
           values: dataPoints
         }]
       };
@@ -386,7 +395,7 @@ export class MetricsHandler {
 
     const metrics = {
       timestamp: Date.now(),
-      environment: this.env.ENVIRONMENT,
+      environment: this.env.ENVIRONMENT || 'local',
       database: await this.collectDatabaseMetrics(),
       application: this.observability.getObservabilityData(),
       system: await this.collectSystemMetrics(),
@@ -405,7 +414,6 @@ export class MetricsHandler {
     });
   }
 
-  // Health metrics specifically for alerting
   private async handleHealthMetrics(request: Request): Promise<Response> {
     const healthStatus = await this.collectHealthMetrics();
 
@@ -517,7 +525,6 @@ export class MetricsHandler {
     };
   }
 
-  // Collect health metrics for alerting
   private async collectHealthMetrics() {
     const dbHealth = await this.checkDatabaseHealth();
     const appHealth = this.checkApplicationHealth();
@@ -526,7 +533,7 @@ export class MetricsHandler {
       overall_status: dbHealth.healthy && appHealth.healthy ? 'healthy' : 'unhealthy',
       database: dbHealth,
       application: appHealth,
-      environment: this.env.ENVIRONMENT,
+      environment: this.env.ENVIRONMENT || 'local',
       timestamp: Date.now()
     };
   }
@@ -561,11 +568,12 @@ export class MetricsHandler {
   // Format metrics in Prometheus format
   private formatPrometheusMetrics(metrics: any): string {
     let output = '';
+    const environment = this.env.ENVIRONMENT || 'local';
 
     // Add standard Prometheus 'up' metric
     output += `# HELP up Whether the service is up\n`;
     output += `# TYPE up gauge\n`;
-    output += `up{environment="${this.env.ENVIRONMENT}"} 1\n\n`;
+    output += `up{environment="${environment}"} 1\n\n`;
 
     // Add newsletter-specific metrics with proper conversion
     const metricDefinitions = {
@@ -608,7 +616,7 @@ export class MetricsHandler {
 
         output += `# HELP ${metricName} ${definition.help}\n`;
         output += `# TYPE ${metricName} ${definition.type}\n`;
-        output += `${metricName}{environment="${this.env.ENVIRONMENT}"} ${value}\n\n`;
+        output += `${metricName}{environment="${environment}"} ${value}\n\n`;
       }
     }
 
