@@ -25,6 +25,13 @@
     "test:staging": "TEST_ENV=staging vitest run --config vitest.smoke.config.ts tests/smoke-remote.test.ts --reporter=verbose",
     "test:production": "TEST_ENV=production vitest run --config vitest.smoke.config.ts tests/smoke-remote.test.ts --reporter=verbose",
 
+    "test:metrics": "vitest run tests/metrics.test.ts",
+    "test:metrics:local": "TEST_ENV=local vitest run tests/metrics.test.ts",
+    "test:metrics:staging": "TEST_ENV=staging vitest run tests/metrics.test.ts",
+    "test:metrics:production": "TEST_ENV=production vitest run tests/metrics.test.ts",
+    "validate:metrics": "./scripts/metrics-validation.sh production",
+    "validate:metrics:staging": "./scripts/metrics-validation.sh staging",
+
     "test:staging:workers": "TEST_ENV=staging vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
     "test:production:workers": "TEST_ENV=production vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
 
