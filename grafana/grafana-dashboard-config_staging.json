@@ -46,7 +46,7 @@
       {
         "id": 2,
         "title": "Newsletter Subscription Activity",
-        "type": "graph",
+        "type": "timeseries",
         "targets": [
           {
             "expr": "newsletter_subscriptions_24h",
@@ -59,12 +59,70 @@
             "refId": "B"
           }
         ],
-        "yAxes": [
-          {
-            "label": "Count",
-            "min": 0
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              },
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "axisColorMode": "text",
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "calcs": [],
+            "displayMode": "visible",
+            "placement": "bottom"
           }
-        ],
+        },
         "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
       },
       {
@@ -76,6 +134,11 @@
             "expr": "up",
             "legendFormat": "Service Status",
             "refId": "A"
+          },
+          {
+            "expr": "database_status",
+            "legendFormat": "Database Status",
+            "refId": "B"
           }
         ],
         "fieldConfig": {
@@ -92,8 +155,8 @@
             "mappings": [
               {
                 "options": {
-                  "0": {"text": "Down"},
-                  "1": {"text": "Up"}
+                  "0": {"text": "Down", "color": "red"},
+                  "1": {"text": "Up", "color": "green"}
                 },
                 "type": "value"
               }
@@ -104,8 +167,8 @@
       },
       {
         "id": 4,
-        "title": "Subscriber Growth",
-        "type": "graph",
+        "title": "Subscriber Growth Over Time",
+        "type": "timeseries",
         "targets": [
           {
             "expr": "newsletter_subscribers_total",
@@ -118,25 +181,125 @@
             "refId": "B"
           }
         ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              },
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "axisColorMode": "text",
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
         "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
       },
       {
         "id": 5,
         "title": "Recent Activity",
-        "type": "graph",
+        "type": "timeseries",
         "targets": [
           {
             "expr": "newsletter_subscriptions_24h",
-            "legendFormat": "New Subscriptions",
+            "legendFormat": "New Subscriptions (24h)",
             "refId": "A"
           }
         ],
-        "yAxes": [
-          {
-            "label": "Count",
-            "min": 0
-          }
-        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "barAlignment": 0,
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "never",
+              "pointSize": 5,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              },
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "axisColorMode": "text",
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
         "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
       },
       {
@@ -169,6 +332,33 @@
             "instant": true
           }
         ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto",
+              "inspect": false
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "showHeader": true
+        },
         "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
       }
     ],
@@ -178,8 +368,8 @@
           "name": "environment",
           "type": "constant",
           "current": {
-            "value": "production",
-            "text": "production"
+            "value": "staging",
+            "text": "staging"
           }
         }
       ]
@@ -189,7 +379,7 @@
     }
   },
   "datasource_config": {
-    "name": "Newsletter API Metrics",
+    "name": "Newsletter staging API Metrics",
     "type": "prometheus",
     "url": "https://api-staging.rnwolf.net/metrics",
     "access": "proxy",

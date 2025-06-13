@@ -308,10 +308,17 @@ export class MetricsHandler {
     const dbMetrics = await this.collectDatabaseMetrics();
     const appMetrics = this.observability.getObservabilityData();
 
-    const prometheusMetrics = this.formatPrometheusMetrics({
+    // Combine all metrics and ensure database_status is available at top level
+    const allMetrics = {
       ...dbMetrics,
-      ...appMetrics
-    });
+      up: 1, // Standard Prometheus metric
+      ...appMetrics,
+      // Ensure database_status is available at both levels for compatibility
+      database_status: dbMetrics.database_status,
+      database: dbMetrics
+    };
+
+    const prometheusMetrics = this.formatPrometheusMetrics(allMetrics);
 
     return new Response(prometheusMetrics, {
       headers: {
@@ -505,10 +512,53 @@ export class MetricsHandler {
   private formatPrometheusMetrics(metrics: any): string {
     let output = '';
 
-    for (const [key, value] of Object.entries(metrics)) {
-      if (typeof value === 'number') {
-        output += `# TYPE ${key} gauge\n`;
-        output += `${key}{environment="${this.env.ENVIRONMENT}"} ${value}\n`;
+    // Add standard Prometheus 'up' metric
+    output += `# HELP up Whether the service is up\n`;
+    output += `# TYPE up gauge\n`;
+    output += `up{environment="${this.env.ENVIRONMENT}"} 1\n\n`;
+
+    // Add newsletter-specific metrics with proper conversion
+    const metricDefinitions = {
+      newsletter_subscribers_total: {
+        help: 'Total number of newsletter subscribers',
+        type: 'gauge'
+      },
+      newsletter_subscribers_active: {
+        help: 'Number of active newsletter subscribers',
+        type: 'gauge'
+      },
+      newsletter_subscriptions_24h: {
+        help: 'Newsletter subscriptions in the last 24 hours',
+        type: 'gauge'
+      },
+      newsletter_unsubscribes_24h: {
+        help: 'Newsletter unsubscribes in the last 24 hours',
+        type: 'gauge'
+      },
+      database_status: {
+        help: 'Database connection status (1=connected, 0=error)',
+        type: 'gauge'
+      }
+    };
+
+    // Process each defined metric
+    for (const [metricName, definition] of Object.entries(metricDefinitions)) {
+      let value = metrics[metricName];
+
+      // Handle nested metrics (like database.database_status)
+      if (value === undefined && metrics.database && metrics.database[metricName]) {
+        value = metrics.database[metricName];
+      }
+
+      if (value !== undefined) {
+        // Convert database_status string to numeric
+        if (metricName === 'database_status') {
+          value = value === 'connected' ? 1 : 0;
+        }
+
+        output += `# HELP ${metricName} ${definition.help}\n`;
+        output += `# TYPE ${metricName} ${definition.type}\n`;
+        output += `${metricName}{environment="${this.env.ENVIRONMENT}"} ${value}\n\n`;
       }
     }
 
