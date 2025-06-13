@@ -201,6 +201,30 @@ export class MetricsHandler {
   }
 
   private async queryMetrics(query: string, timestamp: number, dbMetrics: any): Promise<any> {
+    // Handle the 'up' metric (standard Prometheus health check)
+    if (query.includes('up')) {
+      return {
+        resultType: 'vector',
+        result: [{
+          metric: { __name__: 'up', environment: this.env.ENVIRONMENT },
+          value: [timestamp, '1']  // Always 1 if we're responding
+        }]
+      };
+    }
+
+    // Handle the database_status metric
+    if (query.includes('database_status')) {
+      const statusValue = dbMetrics.database_status === 'connected' ? '1' : '0';
+      return {
+        resultType: 'vector',
+        result: [{
+          metric: { __name__: 'database_status', environment: this.env.ENVIRONMENT },
+          value: [timestamp, statusValue]
+        }]
+      };
+    }
+
+
     // Parse simple metric queries
     if (query.includes('newsletter_subscribers_total')) {
       return {
@@ -246,22 +270,49 @@ export class MetricsHandler {
     for (let time = start; time <= end; time += step) {
       let value = '0';
 
-      if (query.includes('newsletter_subscribers_total')) {
+      if (query.includes('up')) {
+        // 'up' metric should always be 1 if we're responding
+        value = '1';
+      } else if (query.includes('database_status')) {
+        // Database status: 1 for connected, 0 for error
+        value = dbMetrics.database_status === 'connected' ? '1' : '0';
+      } else if (query.includes('newsletter_subscribers_total')) {
         // Simulate slight variation in data over time
         const variation = Math.sin((time - start) / 3600) * 2;
         value = Math.max(0, dbMetrics.newsletter_subscribers_total + variation).toFixed(0);
       } else if (query.includes('newsletter_subscribers_active')) {
         const variation = Math.sin((time - start) / 3600) * 1;
         value = Math.max(0, dbMetrics.newsletter_subscribers_active + variation).toFixed(0);
+      } else if (query.includes('newsletter_subscriptions_24h')) {
+        // For 24h metrics, keep them relatively stable with small variations
+        const variation = Math.sin((time - start) / 7200) * 0.5; // Smaller variation
+        value = Math.max(0, dbMetrics.newsletter_subscriptions_24h + variation).toFixed(0);
+      } else if (query.includes('newsletter_unsubscribes_24h')) {
+        const variation = Math.sin((time - start) / 7200) * 0.3;
+        value = Math.max(0, dbMetrics.newsletter_unsubscribes_24h + variation).toFixed(0);
       }
 
       dataPoints.push([time, value]);
     }
 
-    if (query.includes('newsletter_subscribers_total') || query.includes('newsletter_subscribers_active')) {
-      const metricName = query.includes('newsletter_subscribers_total') ?
-        'newsletter_subscribers_total' : 'newsletter_subscribers_active';
+    // Determine the metric name for the response
+    let metricName = 'unknown';
+    if (query.includes('up')) {
+      metricName = 'up';
+    } else if (query.includes('database_status')) {
+      metricName = 'database_status';
+    } else if (query.includes('newsletter_subscribers_total')) {
+      metricName = 'newsletter_subscribers_total';
+    } else if (query.includes('newsletter_subscribers_active')) {
+      metricName = 'newsletter_subscribers_active';
+    } else if (query.includes('newsletter_subscriptions_24h')) {
+      metricName = 'newsletter_subscriptions_24h';
+    } else if (query.includes('newsletter_unsubscribes_24h')) {
+      metricName = 'newsletter_unsubscribes_24h';
+    }
 
+    // Return the time series data if we found a matching metric
+    if (metricName !== 'unknown') {
       return {
         resultType: 'matrix',
         result: [{
@@ -277,7 +328,6 @@ export class MetricsHandler {
       result: []
     };
   }
-
 
   private authenticateRequest(request: Request): { success: boolean; error?: string } {
     const authHeader = request.headers.get('Authorization');
