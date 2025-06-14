@@ -21,9 +21,28 @@
       ],
       "vars": {
         "ENVIRONMENT": "local",
+        "API_BASE_URL": "http://localhost:8787",
+        "CORS_ORIGIN": "http://localhost:3000",
         "API_VERSION": "v1",
           "HMAC_SECRET_KEY": "test-secret",
           "GRAFANA_API_KEY": "local-test-key"
+      },
+      "queues": {
+        "producers": [
+          {
+            "queue": "email-verification-queue",
+            "binding": "EMAIL_VERIFICATION_QUEUE"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "email-verification-queue",
+            "max_batch_size": 10,
+            "max_batch_timeout": 30,
+            "max_retries": 3,
+            "dead_letter_queue": "email-verification-dlq"
+          }
+        ]
       }
     },
 
@@ -44,9 +63,28 @@
       ],
       "vars": {
         "ENVIRONMENT": "staging",
+        "API_BASE_URL": "https://api-staging.rnwolf.net",
+        "CORS_ORIGIN": "https://staging.rnwolf.net",
         "API_VERSION": "v1"
       },
-      "secrets_to_set": [
+      "queues": {
+        "producers": [
+          {
+            "queue": "email-verification-queue-staging",
+            "binding": "EMAIL_VERIFICATION_QUEUE"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "email-verification-queue-staging",
+            "max_batch_size": 10,
+            "max_batch_timeout": 30,
+            "max_retries": 3,
+            "dead_letter_queue": "email-verification-dlq-staging"
+          }
+        ]
+      },
+       "secrets_to_set": [
           "GRAFANA_API_KEY"
         ]
     },
@@ -68,7 +106,26 @@
       ],
       "vars": {
         "ENVIRONMENT": "production",
+        "API_BASE_URL": "https://api.rnwolf.net",
+        "CORS_ORIGIN": "https://www.rnwolf.net",
         "API_VERSION": "v1"
+      },
+      "queues": {
+        "producers": [
+          {
+            "queue": "email-verification-queue-production",
+            "binding": "EMAIL_VERIFICATION_QUEUE"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "email-verification-queue-production",
+            "max_batch_size": 10,
+            "max_batch_timeout": 30,
+            "max_retries": 3,
+            "dead_letter_queue": "email-verification-dlq-production"
+          }
+        ]
       },
       "secrets_to_set": [
           "GRAFANA_API_KEY"

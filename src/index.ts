@@ -1,5 +1,7 @@
 // src/index.ts - Updated with observability
 import { handleUnsubscribe } from './unsubscribe-handler';
+import { handleEmailVerification } from './email-verification-handler';
+import { handleEmailVerificationQueue } from './email-verification-worker';
 import { WorkerObservability, PerformanceMonitor } from './observability/otel';
 import { MetricsHandler } from './metrics/metrics-handler';
 
@@ -8,7 +10,8 @@ interface Env {
   TURNSTILE_SECRET_KEY: string;
   HMAC_SECRET_KEY: string;
   ENVIRONMENT: string;
-  GRAFANA_API_KEY: string; // New environment variable
+  GRAFANA_API_KEY: string;
+  EMAIL_VERIFICATION_QUEUE: Queue;
 }
 
 // CORS configuration
@@ -324,6 +327,13 @@ export default {
       if (url.pathname === '/v1/newsletter/unsubscribe') {
         return await monitor.monitorRequest('GET', '/v1/newsletter/unsubscribe', async () => {
           return handleUnsubscribe(request, env);
+        });
+      }
+
+      // Email verification endpoint
+      if (url.pathname === '/v1/newsletter/verify') {
+        return await monitor.monitorRequest('GET', '/v1/newsletter/verify', async () => {
+          return handleEmailVerification(request, env);
         });
       }
 
