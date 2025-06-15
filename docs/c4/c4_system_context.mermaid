@@ -1,0 +1,38 @@
+graph TB
+    %% C4 Model - Level 1: System Context
+    User["Website Visitor<br/>Subscribes to newsletter"]
+    EmailClient["Email Client<br/>Receives verification emails"]
+    CFTurnstile["Cloudflare Turnstile<br/>Bot protection service"]
+    SMTPService["SMTP Service<br/>Gmail SMTP / SendGrid / Mailgun<br/>Email delivery provider"]
+    NewsletterSystem["Newsletter Subscription System<br/>Handles double opt-in verification"]
+    
+    %% System Context relationships
+    User -.->|"1. Submits subscription form"| NewsletterSystem
+    NewsletterSystem -.->|"2. Validates with Turnstile"| CFTurnstile
+    CFTurnstile -.->|"3. Returns validation result"| NewsletterSystem
+    NewsletterSystem -.->|"4. Sends email via SMTP"| SMTPService
+    SMTPService -.->|"5. Delivers verification email"| EmailClient
+    EmailClient -.->|"6. User clicks verification link"| NewsletterSystem
+    
+    %% Legend
+    subgraph Legend["Legend - System Context"]
+        LegendUser["External Users<br/>People using the system"]
+        LegendExternal["External Services<br/>Third-party systems"]
+        LegendSystem["Our System<br/>Newsletter subscription system"]
+    end
+
+    %% Styling
+    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:3px
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:3px
+    classDef systemFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+
+    class User,EmailClient userFlow
+    class CFTurnstile,SMTPService externalFlow
+    class NewsletterSystem systemFlow
+    class Legend,LegendUser,LegendExternal,LegendSystem legendBox
+    
+    %% Apply legend colors
+    class LegendUser userFlow
+    class LegendExternal externalFlow
+    class LegendSystem systemFlow

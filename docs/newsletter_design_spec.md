@@ -6,11 +6,379 @@
 Create a newsletter subscription service for a MkDocs static website hosted on Cloudflare, allowing users to subscribe to monthly summaries of interesting content with links to detailed articles.
 
 ### 1.2 Scope
+
 - Newsletter signup page integrated with MkDocs site
 - Cloudflare Worker for subscription processing
 - Cloudflare Worker for unsubscribe processing
 - Bot/spam protection using Cloudflare Turnstile
 - Subscriber data storage in Cloudflare D1 database
+- Cloudflare worker to send (second factor) verification via email
+- Cloudflare worker for verification via email link
+
+### C4 Model
+
+The C4 model is a lean graphical notation technique for modeling the architecture of software systems.
+This model helps in visualizing software architecture at varying levels of detail, enhancing communication and collaboration within development teams. It is designed to be easy to learn and developer-friendly, making it effective for onboarding and architecture reviews.
+
+It consists of four levels:
+
+ * Context - a high-level overview of the system and its interactions with external entities
+ * Container - the applications and data stores within it
+ * Component - internal components of a container, mapping them to code abstractions
+ * Code (Optional) -  detailed implementation documentation
+
+
+#### System Context View
+
+```mermaid
+graph TB
+    %% C4 Model - Level 1: System Context
+    User["Website Visitor<br/>Subscribes to newsletter"]
+    EmailClient["Email Client<br/>Receives verification emails"]
+    CFTurnstile["Cloudflare Turnstile<br/>Bot protection service"]
+    SMTPService["SMTP Service<br/>Gmail SMTP / SendGrid / Mailgun<br/>Email delivery provider"]
+    NewsletterSystem["Newsletter Subscription System<br/>Handles double opt-in verification"]
+
+    %% System Context relationships
+    User -.->|"1. Submits subscription form"| NewsletterSystem
+    NewsletterSystem -.->|"2. Validates with Turnstile"| CFTurnstile
+    CFTurnstile -.->|"3. Returns validation result"| NewsletterSystem
+    NewsletterSystem -.->|"4. Sends email via SMTP"| SMTPService
+    SMTPService -.->|"5. Delivers verification email"| EmailClient
+    EmailClient -.->|"6. User clicks verification link"| NewsletterSystem
+
+    %% Legend
+    subgraph Legend["Legend - System Context"]
+        LegendUser["External Users<br/>People using the system"]
+        LegendExternal["External Services<br/>Third-party systems"]
+        LegendSystem["Our System<br/>Newsletter subscription system"]
+    end
+
+    %% Styling
+    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:3px
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:3px
+    classDef systemFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+
+    class User,EmailClient userFlow
+    class CFTurnstile,SMTPService externalFlow
+    class NewsletterSystem systemFlow
+    class Legend,LegendUser,LegendExternal,LegendSystem legendBox
+
+    %% Apply legend colors
+    class LegendUser userFlow
+    class LegendExternal externalFlow
+    class LegendSystem systemFlow
+```
+
+#### Container view
+
+```mermaid
+graph TB
+    %% External actors
+    User["Website Visitor"]
+    EmailClient["Email Client"]
+    CFTurnstile["Cloudflare Turnstile"]
+    SMTPService["SMTP Service<br/>Gmail SMTP / SendGrid / Mailgun"]
+
+    %% C4 Model - Level 2: Container View
+    subgraph NewsletterSystem["Newsletter Subscription System"]
+        subgraph StaticWebsite["Static Website (MkDocs)"]
+            WebForm["Newsletter Form<br/>HTML + JavaScript<br/>newsletter.js"]
+            NewsletterNext["Thank You Page<br/>newsletter_next.html<br/>Confirmation page"]
+        end
+
+        subgraph CloudflareWorkers["Cloudflare Workers"]
+            APIWorker["Newsletter API Worker<br/>TypeScript<br/>Handles HTTP requests"]
+            EmailWorker["Email Queue Worker<br/>TypeScript<br/>Processes email queue"]
+        end
+
+        subgraph CloudflareServices["Cloudflare Infrastructure"]
+            D1DB[("D1 Database<br/>SQLite<br/>Subscriber data")]
+            EmailQueue["Email Queue<br/>Cloudflare Queues<br/>Async email jobs"]
+        end
+    end
+
+    %% Container relationships
+    User -->|"1. Fills subscription form"| WebForm
+    WebForm -->|"2. POST /v1/newsletter/subscribe"| APIWorker
+    APIWorker -->|"3. Validates with Turnstile"| CFTurnstile
+    APIWorker -->|"4. Stores unverified subscriber"| D1DB
+    APIWorker -->|"5. Queues verification email"| EmailQueue
+    APIWorker -->|"6. Redirects user (302)"| NewsletterNext
+    NewsletterNext -->|"7. User sees thank you message"| User
+    EmailQueue -->|"8. Triggers email processing"| EmailWorker
+    EmailWorker -->|"9. Sends email via SMTP"| SMTPService
+    SMTPService -->|"10. Delivers verification email"| EmailClient
+    EmailClient -->|"11. User clicks verification link"| APIWorker
+    APIWorker -->|"12. Updates verification status"| D1DB
+
+    %% Legend
+    subgraph Legend["Legend - Containers"]
+        LegendUser["Users & External Services"]
+        LegendWeb["Static Web Content"]
+        LegendWorker["Cloudflare Workers"]
+        LegendData["Data & Infrastructure"]
+    end
+
+    %% Styling
+    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef webFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef workerFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef dataFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+
+    class User,EmailClient,CFTurnstile,SMTPService userFlow
+    class WebForm,NewsletterNext webFlow
+    class APIWorker,EmailWorker workerFlow
+    class D1DB,EmailQueue dataFlow
+    class Legend,LegendUser,LegendWeb,LegendWorker,LegendData legendBox
+
+    %% Apply legend colors
+    class LegendUser userFlow
+    class LegendWeb webFlow
+    class LegendWorker workerFlow
+    class LegendData dataFlow
+```
+
+#### Component View
+
+```mermaid
+graph TB
+    %% External containers
+    WebForm["Newsletter Form"]
+    NewsletterNext["Thank You Page"]
+    VerificationEmail["Verification Email<br/>(sent to user)"]
+    NewsletterEmail["Newsletter Email<br/>(monthly newsletter)"]
+    Grafana["Grafana<br/>(Monitoring & Analytics)"]
+    EmailWorker["Email Queue Worker"]
+    D1DB[("D1 Database")]
+    EmailQueue["Email Queue"]
+    CFTurnstile["Cloudflare Turnstile"]
+    SMTPService["SMTP Service"]
+
+    %% C4 Model - Level 3: Component View - API Worker
+    subgraph APIWorker["Newsletter API Worker"]
+        subgraph HTTPHandlers["HTTP Request Handlers"]
+            SubscribeHandler["SubscribeHandler<br/>handleSubscribe()<br/>Processes subscription requests"]
+            VerifyHandler["VerifyHandler<br/>handleVerify()<br/>Processes verification clicks"]
+            MetricsHandler["MetricsHandler<br/>handleMetrics()<br/>Health, metrics & performance for Grafana"]
+            UnsubscribeHandler["UnsubscribeHandler<br/>handleUnsubscribe()<br/>Processes unsubscribe requests"]
+        end
+
+        subgraph BusinessServices["Business Logic Services"]
+            SubscriptionService["SubscriptionService<br/>Subscription business logic<br/>Validation & processing"]
+            VerificationService["VerificationService<br/>Token generation & validation<br/>Email verification logic"]
+            EmailQueueService["EmailQueueService<br/>Queue management<br/>Email job creation"]
+            MetricsService["MetricsService<br/>Performance tracking<br/>Health monitoring & analytics"]
+        end
+
+        subgraph ExternalClients["External Integration Clients"]
+            TurnstileClient["TurnstileClient<br/>verifyTurnstile()<br/>Bot protection validation"]
+            DatabaseClient["DatabaseClient<br/>D1 database operations<br/>CRUD operations"]
+            SMTPClient["SMTPClient<br/>sendEmail()<br/>SMTP email delivery"]
+        end
+    end
+
+    %% Component relationships
+    WebForm -->|"POST request"| SubscribeHandler
+    VerificationEmail -->|"User clicks verification link"| VerifyHandler
+    NewsletterEmail -->|"User clicks unsubscribe link"| UnsubscribeHandler
+    Grafana -->|"GET /metrics (authenticated)"| MetricsHandler
+
+    SubscribeHandler --> SubscriptionService
+    SubscribeHandler --> TurnstileClient
+    SubscribeHandler -->|"302 Redirect"| NewsletterNext
+    VerifyHandler --> VerificationService
+    UnsubscribeHandler --> VerificationService
+    MetricsHandler --> MetricsService
+
+    SubscriptionService --> DatabaseClient
+    SubscriptionService --> EmailQueueService
+    VerificationService --> DatabaseClient
+    MetricsService --> DatabaseClient
+
+    TurnstileClient --> CFTurnstile
+    DatabaseClient --> D1DB
+    EmailQueueService --> EmailQueue
+
+    EmailQueue --> EmailWorker
+    EmailWorker --> SMTPClient
+    SMTPClient --> SMTPService
+    SMTPService --> VerificationEmail
+    SMTPService --> NewsletterEmail
+
+    %% Legend
+    subgraph Legend["Legend - Components"]
+        LegendHandler["HTTP Handlers<br/>Request processing"]
+        LegendService["Business Services<br/>Core logic"]
+        LegendClient["External Clients<br/>Integration adapters"]
+        LegendExternal["External Systems<br/>Dependencies"]
+    end
+
+    %% Styling
+    classDef handlerFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef serviceFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef clientFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+
+    class SubscribeHandler,VerifyHandler,MetricsHandler,UnsubscribeHandler handlerFlow
+    class SubscriptionService,VerificationService,EmailQueueService,MetricsService serviceFlow
+    class TurnstileClient,DatabaseClient,SMTPClient clientFlow
+    class WebForm,NewsletterNext,VerificationEmail,NewsletterEmail,Grafana,EmailWorker,D1DB,EmailQueue,CFTurnstile,SMTPService externalFlow
+    class Legend,LegendHandler,LegendService,LegendClient,LegendExternal legendBox
+
+    %% Apply legend colors
+    class LegendHandler handlerFlow
+    class LegendService serviceFlow
+    class LegendClient clientFlow
+    class LegendExternal externalFlow
+```
+
+#### Code View
+
+```mermaid
+graph TB
+    %% External Components
+    SubscribeHandler["SubscribeHandler"]
+    VerifyHandler["VerifyHandler"]
+    MetricsHandler["MetricsHandler"]
+    EmailWorker["Email Queue Worker"]
+    SMTPService["SMTP Service"]
+    Grafana["Grafana"]
+
+    %% SubscriptionService Methods
+    CreateUnverified["createUnverifiedSubscriber()"]
+    ValidateEmail["validateEmailFormat()"]
+    QueueEmail["queueVerificationEmail()"]
+
+    %% VerificationService Methods
+    GenerateToken["generateVerificationToken()"]
+    ValidateToken["validateVerificationToken()"]
+    MarkVerified["markSubscriberAsVerified()"]
+
+    %% MetricsService Methods
+    GetSubscriberStats["getSubscriberStats()"]
+    GetHealthMetrics["getHealthMetrics()"]
+    FormatPrometheus["formatPrometheusMetrics()"]
+    GetPerformanceMetrics["getPerformanceMetrics()"]
+
+    %% Database Operations
+    InsertSubscriber["INSERT INTO subscribers"]
+    UpdateVerified["UPDATE SET verified=TRUE"]
+    FindByToken["SELECT WHERE token=?"]
+    FindByEmail["SELECT WHERE email=?"]
+    QueryMetrics["SELECT COUNT(*) FROM subscribers"]
+
+    %% Email Operations
+    QueueMessage["queue.send()"]
+    ProcessBatch["queue.consume()"]
+    HandleRetry["message.retry()"]
+    SendSMTP["smtp.sendMail()"]
+    BuildEmailTemplate["buildVerificationEmail()"]
+
+    %% Handler to Service Relationships
+    SubscribeHandler --> CreateUnverified
+    SubscribeHandler --> ValidateEmail
+    VerifyHandler --> ValidateToken
+    VerifyHandler --> MarkVerified
+    MetricsHandler --> GetSubscriberStats
+    MetricsHandler --> GetHealthMetrics
+    MetricsHandler --> FormatPrometheus
+    MetricsHandler --> GetPerformanceMetrics
+
+    %% Service to Service Relationships
+    CreateUnverified --> GenerateToken
+    CreateUnverified --> QueueEmail
+
+    %% Service to Database Relationships
+    CreateUnverified --> InsertSubscriber
+    ValidateEmail --> FindByEmail
+    ValidateToken --> FindByToken
+    MarkVerified --> UpdateVerified
+    GetSubscriberStats --> QueryMetrics
+    GetHealthMetrics --> QueryMetrics
+    GetPerformanceMetrics --> QueryMetrics
+
+    %% Email Flow Relationships
+    QueueEmail --> QueueMessage
+    EmailWorker --> ProcessBatch
+    ProcessBatch --> BuildEmailTemplate
+    BuildEmailTemplate --> SendSMTP
+    SendSMTP --> SMTPService
+    ProcessBatch --> HandleRetry
+
+    %% External System Relationships
+    Grafana --> MetricsHandler
+
+    %% Legend
+    subgraph Legend["Legend - Code Level"]
+        LegendMethod["Service Methods"]
+        LegendDatabase["Database Operations"]
+        LegendQueue["Queue & Email Operations"]
+        LegendExternal["External Components"]
+    end
+
+    %% Styling
+    classDef methodFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef databaseFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef queueFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+
+    %% Apply styling to methods
+    class CreateUnverified,ValidateEmail,QueueEmail,GenerateToken,ValidateToken,MarkVerified,GetSubscriberStats,GetHealthMetrics,FormatPrometheus,GetPerformanceMetrics methodFlow
+
+    %% Apply styling to database operations
+    class InsertSubscriber,UpdateVerified,FindByToken,FindByEmail,QueryMetrics databaseFlow
+
+    %% Apply styling to queue operations
+    class QueueMessage,ProcessBatch,HandleRetry,SendSMTP,BuildEmailTemplate queueFlow
+
+    %% Apply styling to external components
+    class SubscribeHandler,VerifyHandler,MetricsHandler,EmailWorker,SMTPService,Grafana externalFlow
+
+    %% Apply styling to legend
+    class Legend,LegendMethod,LegendDatabase,LegendQueue,LegendExternal legendBox
+
+    %% Apply legend colors
+    class LegendMethod methodFlow
+    class LegendDatabase databaseFlow
+    class LegendQueue queueFlow
+    class LegendExternal externalFlow
+```
+
+###### Code-Level Components:
+
+###### 🔵 Service Methods (Blue)
+
+Subscription: createUnverifiedSubscriber(), validateEmailFormat(), queueVerificationEmail()
+Verification: generateVerificationToken(), validateVerificationToken(), markSubscriberAsVerified()
+Metrics: getSubscriberStats(), getHealthMetrics(), formatPrometheusMetrics(), getPerformanceMetrics()
+
+###### 🟢 Database Operations (Green)
+
+Subscription: INSERT INTO subscribers, SELECT WHERE email=?
+Verification: SELECT WHERE token=?, UPDATE SET verified=TRUE
+Metrics: SELECT COUNT(*) FROM subscribers
+
+###### 🟣 Queue & Email Operations (Purple)
+
+Queue: queue.send(), queue.consume(), message.retry()
+Email: buildVerificationEmail(), smtp.sendMail()
+
+###### 🟠 External Components (Orange)
+
+Handlers: SubscribeHandler, VerifyHandler, MetricsHandler
+External Systems: Grafana, SMTP Service, Email Worker
+
+##### Key Flows:
+
+Subscription: SubscribeHandler → createUnverifiedSubscriber() → INSERT INTO subscribers
+Verification: VerifyHandler → validateVerificationToken() → SELECT WHERE token=?
+Metrics: Grafana → MetricsHandler → getSubscriberStats() → SELECT COUNT(*)
+Email: queueVerificationEmail() → queue.send() → EmailWorker → smtp.sendMail()
 
 ## 2. Functional Requirements
 
@@ -84,23 +452,23 @@ CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
     <form id="newsletter-form" class="newsletter-form">
         <div class="md-field">
             <label class="md-field__label" for="newsletter-email">Email Address</label>
-            <input 
-                type="email" 
-                id="newsletter-email" 
-                name="email" 
-                class="md-field__input" 
-                required 
+            <input
+                type="email"
+                id="newsletter-email"
+                name="email"
+                class="md-field__input"
+                required
                 placeholder="Enter your email address"
             >
         </div>
-        
+
         <div class="turnstile-container" id="turnstile-widget"></div>
-        
+
         <button type="submit" class="md-button md-button--primary" id="newsletter-submit">
             Subscribe to Newsletter
         </button>
     </form>
-    
+
     <div id="newsletter-message" class="newsletter-message" style="display: none;"></div>
 </div>
 ```
@@ -269,16 +637,16 @@ D1_DATABASE_ID = "your_database_id"
 def query_d1_database(sql_query):
     """Execute SQL query against Cloudflare D1 database"""
     url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/d1/database/{D1_DATABASE_ID}/query"
-    
+
     headers = {
         "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
         "Content-Type": "application/json"
     }
-    
+
     payload = {
         "sql": sql_query
     }
-    
+
     response = requests.post(url, headers=headers, json=payload)
     return response.json()
 
@@ -305,21 +673,21 @@ def create_unsubscribe_url(email, secret_key, base_url="https://api.yourdomain.c
 def save_subscribers_to_file(filename="subscribers.csv"):
     """Fetch subscribers from D1 and save to local CSV file"""
     print("Fetching subscribers from D1 database...")
-    
+
     subscribers_data = get_active_subscribers()
-    
+
     if not subscribers_data.get('success'):
         print("Error retrieving subscribers:", subscribers_data)
         return False
-    
+
     subscribers = subscribers_data['result'][0]['results']
     print(f"Found {len(subscribers)} active subscribers")
-    
+
     # Save to CSV file
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         fieldnames = ['email', 'subscribed_at', 'email_sent', 'sent_at']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        
+
         writer.writeheader()
         for subscriber in subscribers:
             writer.writerow({
@@ -328,7 +696,7 @@ def save_subscribers_to_file(filename="subscribers.csv"):
                 'email_sent': 'False',
                 'sent_at': ''
             })
-    
+
     print(f"Subscribers saved to {filename}")
     return True
 
@@ -409,16 +777,16 @@ NEWSLETTER_TEMPLATE = """
             <h1>Monthly Interesting Links</h1>
             <p>Your curated collection of interesting content</p>
         </div>
-        
+
         <div class="content">
             <!-- Newsletter content here -->
             <h2>This Month's Highlights</h2>
             <p>Here are some interesting links and thoughts from this month...</p>
-            
+
             <!-- Add your actual newsletter content here -->
-            
+
         </div>
-        
+
         <div class="footer">
             <p>You subscribed to this newsletter on {subscription_date}.</p>
             <p><a href="{unsubscribe_url}">Unsubscribe</a> | <a href="https://www.rnwolf.net">Visit Website</a></p>
@@ -433,20 +801,20 @@ def load_subscribers_from_file(filename=SUBSCRIBERS_FILE):
     if not Path(filename).exists():
         logging.error(f"Subscribers file {filename} not found. Run subscriber_fetcher.py first.")
         return []
-    
+
     subscribers = []
     with open(filename, 'r', newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             subscribers.append(row)
-    
+
     return subscribers
 
 def update_subscriber_status(filename, email, status='True', sent_time=None):
     """Update the email_sent status for a specific subscriber"""
     if sent_time is None:
         sent_time = datetime.utcnow().isoformat()
-    
+
     # Read all subscribers
     subscribers = []
     with open(filename, 'r', newline='', encoding='utf-8') as csvfile:
@@ -456,7 +824,7 @@ def update_subscriber_status(filename, email, status='True', sent_time=None):
                 row['email_sent'] = status
                 row['sent_at'] = sent_time
             subscribers.append(row)
-    
+
     # Write back to file
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         fieldnames = ['email', 'subscribed_at', 'email_sent', 'sent_at']
@@ -467,7 +835,7 @@ def update_subscriber_status(filename, email, status='True', sent_time=None):
 def create_newsletter_email(email, subscription_date):
     """Create newsletter email with unsubscribe link"""
     unsubscribe_url = create_unsubscribe_url(email, HMAC_SECRET_KEY)
-    
+
     # Format subscription date for display
     try:
         # Parse ISO format from D1
@@ -475,22 +843,22 @@ def create_newsletter_email(email, subscription_date):
         formatted_date = sub_date.strftime("%B %d, %Y")
     except:
         formatted_date = subscription_date
-    
+
     html_content = NEWSLETTER_TEMPLATE.format(
         subscription_date=formatted_date,
         unsubscribe_url=unsubscribe_url
     )
-    
+
     # Create email message
     msg = MIMEMultipart('alternative')
     msg['Subject'] = f"Monthly Newsletter - {datetime.now().strftime('%B %Y')}"
     msg['From'] = f"{FROM_NAME} <{FROM_EMAIL}>"
     msg['To'] = email
-    
+
     # Add HTML content
     html_part = MIMEText(html_content, 'html')
     msg.attach(html_part)
-    
+
     return msg
 
 def send_email_smtp(msg, recipient_email):
@@ -499,13 +867,13 @@ def send_email_smtp(msg, recipient_email):
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
         server.login(SMTP_USERNAME, SMTP_PASSWORD)
-        
+
         text = msg.as_string()
         server.sendmail(FROM_EMAIL, recipient_email, text)
         server.quit()
-        
+
         return True, "Email sent successfully"
-    
+
     except Exception as e:
         return False, str(e)
 
@@ -514,46 +882,46 @@ def send_newsletters():
     if not all([HMAC_SECRET_KEY, SMTP_USERNAME, SMTP_PASSWORD, FROM_EMAIL]):
         logging.error("Missing required environment variables")
         return
-    
+
     subscribers = load_subscribers_from_file()
     if not subscribers:
         logging.error("No subscribers found")
         return
-    
+
     total_subscribers = len(subscribers)
     pending_subscribers = [s for s in subscribers if s['email_sent'].lower() != 'true']
     sent_count = total_subscribers - len(pending_subscribers)
-    
+
     logging.info(f"Total subscribers: {total_subscribers}")
     logging.info(f"Already sent: {sent_count}")
     logging.info(f"Pending: {len(pending_subscribers)}")
-    
+
     if not pending_subscribers:
         logging.info("All newsletters have been sent!")
         return
-    
+
     # Confirm before starting
     response = input(f"Send newsletter to {len(pending_subscribers)} subscribers? (y/N): ")
     if response.lower() != 'y':
         logging.info("Newsletter sending cancelled")
         return
-    
+
     success_count = 0
     error_count = 0
-    
+
     for i, subscriber in enumerate(pending_subscribers, 1):
         email = subscriber['email']
         subscription_date = subscriber['subscribed_at']
-        
+
         logging.info(f"Sending {i}/{len(pending_subscribers)} to {email}")
-        
+
         try:
             # Create email
             msg = create_newsletter_email(email, subscription_date)
-            
+
             # Send email
             success, message = send_email_smtp(msg, email)
-            
+
             if success:
                 # Update status in CSV
                 update_subscriber_status(SUBSCRIBERS_FILE, email, 'True')
@@ -564,17 +932,17 @@ def send_newsletters():
                 logging.error(f"✗ Failed to send to {email}: {message}")
                 # Mark as attempted but failed
                 update_subscriber_status(SUBSCRIBERS_FILE, email, 'Failed')
-        
+
         except Exception as e:
             error_count += 1
             logging.error(f"✗ Error sending to {email}: {str(e)}")
             update_subscriber_status(SUBSCRIBERS_FILE, email, 'Error')
-        
+
         # Rate limiting - wait between emails
         if i < len(pending_subscribers):  # Don't wait after the last email
             logging.info(f"Waiting {DELAY_BETWEEN_EMAILS:.1f} seconds...")
             time.sleep(DELAY_BETWEEN_EMAILS)
-    
+
     logging.info(f"Newsletter sending complete!")
     logging.info(f"Successful: {success_count}")
     logging.info(f"Errors: {error_count}")
@@ -586,12 +954,12 @@ def show_status():
     if not subscribers:
         print("No subscribers file found")
         return
-    
+
     total = len(subscribers)
     sent = len([s for s in subscribers if s['email_sent'].lower() == 'true'])
     failed = len([s for s in subscribers if s['email_sent'].lower() in ['failed', 'error']])
     pending = total - sent - failed
-    
+
     print(f"Newsletter Status:")
     print(f"  Total subscribers: {total}")
     print(f"  Successfully sent: {sent}")
@@ -600,7 +968,7 @@ def show_status():
 
 if __name__ == "__main__":
     import sys
-    
+
     if len(sys.argv) > 1 and sys.argv[1] == 'status':
         show_status()
     else:
@@ -697,9 +1065,9 @@ Adjust `EMAILS_PER_MINUTE` based on your provider's limits to avoid being rate l
 
 ### 10.1 Cloudflare Workers
 - **Subscription Worker**: Deployed to `api.yourdomain.com/v1/newsletter/subscribe`
-- **Unsubscribe Worker**: Deployed to `api.yourdomain.com/v1/newsletter/unsubscribe` 
+- **Unsubscribe Worker**: Deployed to `api.yourdomain.com/v1/newsletter/unsubscribe`
 - **API Versioning**: v1 prefix allows for future breaking changes
-- **Environment Variables**: 
+- **Environment Variables**:
   - `TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key
   - `HMAC_SECRET_KEY`: Secret key for generating unsubscribe tokens
   - `D1_DATABASE`: Binding to D1 database
@@ -722,7 +1090,7 @@ Adjust `EMAILS_PER_MINUTE` based on your provider's limits to avoid being rate l
 
 ### 10.4 Database Migration
 - **Initial Setup**: Create D1 database and run schema migration
-- **Backup Strategy**: Regular exports for data protection  
+- **Backup Strategy**: Regular exports for data protection
 - **Testing**: Validate schema and worker integration on staging subdomain
 
 ### 11.5 CSP Header Updates

@@ -1,0 +1,90 @@
+graph TB
+    %% External containers
+    WebForm["Newsletter Form"]
+    NewsletterNext["Thank You Page"]
+    VerificationEmail["Verification Email<br/>(sent to user)"]
+    NewsletterEmail["Newsletter Email<br/>(monthly newsletter)"]
+    Grafana["Grafana<br/>(Monitoring & Analytics)"]
+    EmailWorker["Email Queue Worker"]
+    D1DB[("D1 Database")]
+    EmailQueue["Email Queue"]
+    CFTurnstile["Cloudflare Turnstile"]
+    SMTPService["SMTP Service"]
+
+    %% C4 Model - Level 3: Component View - API Worker
+    subgraph APIWorker["Newsletter API Worker"]
+        subgraph HTTPHandlers["HTTP Request Handlers"]
+            SubscribeHandler["SubscribeHandler<br/>handleSubscribe()<br/>Processes subscription requests"]
+            VerifyHandler["VerifyHandler<br/>handleVerify()<br/>Processes verification clicks"]
+            MetricsHandler["MetricsHandler<br/>handleMetrics()<br/>Health, metrics & performance for Grafana"]
+            UnsubscribeHandler["UnsubscribeHandler<br/>handleUnsubscribe()<br/>Processes unsubscribe requests"]
+        end
+        
+        subgraph BusinessServices["Business Logic Services"]
+            SubscriptionService["SubscriptionService<br/>Subscription business logic<br/>Validation & processing"]
+            VerificationService["VerificationService<br/>Token generation & validation<br/>Email verification logic"]
+            EmailQueueService["EmailQueueService<br/>Queue management<br/>Email job creation"]
+            MetricsService["MetricsService<br/>Performance tracking<br/>Health monitoring & analytics"]
+        end
+        
+        subgraph ExternalClients["External Integration Clients"]
+            TurnstileClient["TurnstileClient<br/>verifyTurnstile()<br/>Bot protection validation"]
+            DatabaseClient["DatabaseClient<br/>D1 database operations<br/>CRUD operations"]
+            SMTPClient["SMTPClient<br/>sendEmail()<br/>SMTP email delivery"]
+        end
+    end
+    
+    %% Component relationships
+    WebForm -->|"POST request"| SubscribeHandler
+    VerificationEmail -->|"User clicks verification link"| VerifyHandler
+    NewsletterEmail -->|"User clicks unsubscribe link"| UnsubscribeHandler
+    Grafana -->|"GET /metrics (authenticated)"| MetricsHandler
+    
+    SubscribeHandler --> SubscriptionService
+    SubscribeHandler --> TurnstileClient
+    SubscribeHandler -->|"302 Redirect"| NewsletterNext
+    VerifyHandler --> VerificationService
+    UnsubscribeHandler --> VerificationService
+    MetricsHandler --> MetricsService
+    
+    SubscriptionService --> DatabaseClient
+    SubscriptionService --> EmailQueueService
+    VerificationService --> DatabaseClient
+    MetricsService --> DatabaseClient
+    
+    TurnstileClient --> CFTurnstile
+    DatabaseClient --> D1DB
+    EmailQueueService --> EmailQueue
+    
+    EmailQueue --> EmailWorker
+    EmailWorker --> SMTPClient
+    SMTPClient --> SMTPService
+    SMTPService --> VerificationEmail
+    SMTPService --> NewsletterEmail
+
+    %% Legend
+    subgraph Legend["Legend - Components"]
+        LegendHandler["HTTP Handlers<br/>Request processing"]
+        LegendService["Business Services<br/>Core logic"]
+        LegendClient["External Clients<br/>Integration adapters"]
+        LegendExternal["External Systems<br/>Dependencies"]
+    end
+
+    %% Styling
+    classDef handlerFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef serviceFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef clientFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+
+    class SubscribeHandler,VerifyHandler,MetricsHandler,UnsubscribeHandler handlerFlow
+    class SubscriptionService,VerificationService,EmailQueueService,MetricsService serviceFlow
+    class TurnstileClient,DatabaseClient,SMTPClient clientFlow
+    class WebForm,NewsletterNext,VerificationEmail,NewsletterEmail,Grafana,EmailWorker,D1DB,EmailQueue,CFTurnstile,SMTPService externalFlow
+    class Legend,LegendHandler,LegendService,LegendClient,LegendExternal legendBox
+    
+    %% Apply legend colors
+    class LegendHandler handlerFlow
+    class LegendService serviceFlow
+    class LegendClient clientFlow
+    class LegendExternal externalFlow

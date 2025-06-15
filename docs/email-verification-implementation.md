@@ -1,8 +1,8 @@
 # Email verification Implementation
 
-# Architecture
+# Solution flow
 
-The solution architecture:
+Left to right flow:
 
 ```
 User Subscribes → Turnstile Check → Database: unverified → Redirect to newsletter_next → Queue Message → Email Worker → Verification Email
@@ -18,6 +18,47 @@ User Subscribes → Turnstile Check → Database: unverified → Redirect to new
                                                                                                                         Database: verified
 ```
 
+Solution workflow top to bottom:
+
+```
+1. User Subscribes (Form Submit)
+   ↓
+2. Cloudflare Turnstile Verification
+   ├─ FAIL → Return error to user
+   └─ PASS → Continue
+   ↓
+3. Database: Create unverified subscriber
+   ↓
+4. Redirect to newsletter_next page
+   ↓ (async)
+5. Queue verification email message
+   ↓
+6. Email Worker processes queue
+   ↓
+7. Send Verification Email to user
+   ↓
+8. User receives email and clicks verification link
+   ↓
+9. Verification endpoint (Confirm Worker)
+   ↓
+10. Database: Mark subscriber as verified
+```
+
+## Key Security & Flow details:
+
+1. Form Submit: User fills out subscription form
+2. Turnstile Challenge: Client-side bot protection widget
+3. Turnstile Verification: Server-side validation of Turnstile token
+4. Database Record: Only created if Turnstile passes
+5. User Feedback: Immediate redirect to newsletter_next (no waiting for email)
+6. Email Queue: Asynchronous email sending (doesn't slow down user experience)
+7. Send Email: Crate email and send to user via SMTP server
+8. Email Verification: Second layer of verification via email click
+
+We have two layers of verification:
+
+ - Layer 1: Turnstile (prevents bots from subscribing)
+ - Layer 2: Email verification (confirms email ownership)
 
 # Queues
 
@@ -57,37 +98,4 @@ wrangler queues create email-verification-dlq-staging --env staging
 
 wrangler queues create email-verification-queue-production --env production
 wrangler queues create email-verification-dlq-production --env production
-```
-
-## Usage of queues in Worker Code
-
-You can use the queues in your worker like this:
-
-```typescript
-// In your subscription handler
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    // When user subscribes, queue verification email
-    await env.EMAIL_VERIFICATION_QUEUE.send({
-      email: "user@example.com",
-      verificationToken: "abc123",
-      subscriptionData: { /* ... */ }
-    });
-
-    return new Response("Check your email for verification");
-  },
-
-  // Queue consumer handler
-  async queue(batch: MessageBatch<any>, env: Env): Promise<void> {
-    for (const message of batch.messages) {
-      try {
-        await sendVerificationEmail(message.body, env);
-        message.ack();
-      } catch (error) {
-        console.error("Failed to send verification email:", error);
-        message.retry();
-      }
-    }
-  }
-};
 ```

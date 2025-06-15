@@ -1,0 +1,108 @@
+graph TB
+    %% External Components
+    SubscribeHandler["SubscribeHandler"]
+    VerifyHandler["VerifyHandler"]
+    MetricsHandler["MetricsHandler"]
+    EmailWorker["Email Queue Worker"]
+    SMTPService["SMTP Service"]
+    Grafana["Grafana"]
+
+    %% SubscriptionService Methods
+    CreateUnverified["createUnverifiedSubscriber()"]
+    ValidateEmail["validateEmailFormat()"]
+    QueueEmail["queueVerificationEmail()"]
+    
+    %% VerificationService Methods
+    GenerateToken["generateVerificationToken()"]
+    ValidateToken["validateVerificationToken()"]
+    MarkVerified["markSubscriberAsVerified()"]
+    
+    %% MetricsService Methods
+    GetSubscriberStats["getSubscriberStats()"]
+    GetHealthMetrics["getHealthMetrics()"]
+    FormatPrometheus["formatPrometheusMetrics()"]
+    GetPerformanceMetrics["getPerformanceMetrics()"]
+    
+    %% Database Operations
+    InsertSubscriber["INSERT INTO subscribers"]
+    UpdateVerified["UPDATE SET verified=TRUE"]
+    FindByToken["SELECT WHERE token=?"]
+    FindByEmail["SELECT WHERE email=?"]
+    QueryMetrics["SELECT COUNT(*) FROM subscribers"]
+    
+    %% Email Operations
+    QueueMessage["queue.send()"]
+    ProcessBatch["queue.consume()"]
+    HandleRetry["message.retry()"]
+    SendSMTP["smtp.sendMail()"]
+    BuildEmailTemplate["buildVerificationEmail()"]
+    
+    %% Handler to Service Relationships
+    SubscribeHandler --> CreateUnverified
+    SubscribeHandler --> ValidateEmail
+    VerifyHandler --> ValidateToken
+    VerifyHandler --> MarkVerified
+    MetricsHandler --> GetSubscriberStats
+    MetricsHandler --> GetHealthMetrics
+    MetricsHandler --> FormatPrometheus
+    MetricsHandler --> GetPerformanceMetrics
+    
+    %% Service to Service Relationships
+    CreateUnverified --> GenerateToken
+    CreateUnverified --> QueueEmail
+    
+    %% Service to Database Relationships
+    CreateUnverified --> InsertSubscriber
+    ValidateEmail --> FindByEmail
+    ValidateToken --> FindByToken
+    MarkVerified --> UpdateVerified
+    GetSubscriberStats --> QueryMetrics
+    GetHealthMetrics --> QueryMetrics
+    GetPerformanceMetrics --> QueryMetrics
+    
+    %% Email Flow Relationships
+    QueueEmail --> QueueMessage
+    EmailWorker --> ProcessBatch
+    ProcessBatch --> BuildEmailTemplate
+    BuildEmailTemplate --> SendSMTP
+    SendSMTP --> SMTPService
+    ProcessBatch --> HandleRetry
+    
+    %% External System Relationships
+    Grafana --> MetricsHandler
+
+    %% Legend
+    subgraph Legend["Legend - Code Level"]
+        LegendMethod["Service Methods"]
+        LegendDatabase["Database Operations"]
+        LegendQueue["Queue & Email Operations"]
+        LegendExternal["External Components"]
+    end
+
+    %% Styling
+    classDef methodFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef databaseFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef queueFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+
+    %% Apply styling to methods
+    class CreateUnverified,ValidateEmail,QueueEmail,GenerateToken,ValidateToken,MarkVerified,GetSubscriberStats,GetHealthMetrics,FormatPrometheus,GetPerformanceMetrics methodFlow
+    
+    %% Apply styling to database operations
+    class InsertSubscriber,UpdateVerified,FindByToken,FindByEmail,QueryMetrics databaseFlow
+    
+    %% Apply styling to queue operations
+    class QueueMessage,ProcessBatch,HandleRetry,SendSMTP,BuildEmailTemplate queueFlow
+    
+    %% Apply styling to external components
+    class SubscribeHandler,VerifyHandler,MetricsHandler,EmailWorker,SMTPService,Grafana externalFlow
+    
+    %% Apply styling to legend
+    class Legend,LegendMethod,LegendDatabase,LegendQueue,LegendExternal legendBox
+    
+    %% Apply legend colors
+    class LegendMethod methodFlow
+    class LegendDatabase databaseFlow
+    class LegendQueue queueFlow
+    class LegendExternal externalFlow

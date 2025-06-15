@@ -1,0 +1,65 @@
+graph TB
+    %% External actors
+    User["Website Visitor"]
+    EmailClient["Email Client"]
+    CFTurnstile["Cloudflare Turnstile"]
+    SMTPService["SMTP Service<br/>Gmail SMTP / SendGrid / Mailgun"]
+
+    %% C4 Model - Level 2: Container View
+    subgraph NewsletterSystem["Newsletter Subscription System"]
+        subgraph StaticWebsite["Static Website (MkDocs)"]
+            WebForm["Newsletter Form<br/>HTML + JavaScript<br/>newsletter.js"]
+            NewsletterNext["Thank You Page<br/>newsletter_next.html<br/>Confirmation page"]
+        end
+        
+        subgraph CloudflareWorkers["Cloudflare Workers"]
+            APIWorker["Newsletter API Worker<br/>TypeScript<br/>Handles HTTP requests"]
+            EmailWorker["Email Queue Worker<br/>TypeScript<br/>Processes email queue"]
+        end
+        
+        subgraph CloudflareServices["Cloudflare Infrastructure"]
+            D1DB[("D1 Database<br/>SQLite<br/>Subscriber data")]
+            EmailQueue["Email Queue<br/>Cloudflare Queues<br/>Async email jobs"]
+        end
+    end
+    
+    %% Container relationships
+    User -->|"1. Fills subscription form"| WebForm
+    WebForm -->|"2. POST /v1/newsletter/subscribe"| APIWorker
+    APIWorker -->|"3. Validates with Turnstile"| CFTurnstile
+    APIWorker -->|"4. Stores unverified subscriber"| D1DB
+    APIWorker -->|"5. Queues verification email"| EmailQueue
+    APIWorker -->|"6. Redirects user (302)"| NewsletterNext
+    NewsletterNext -->|"7. User sees thank you message"| User
+    EmailQueue -->|"8. Triggers email processing"| EmailWorker
+    EmailWorker -->|"9. Sends email via SMTP"| SMTPService
+    SMTPService -->|"10. Delivers verification email"| EmailClient
+    EmailClient -->|"11. User clicks verification link"| APIWorker
+    APIWorker -->|"12. Updates verification status"| D1DB
+
+    %% Legend
+    subgraph Legend["Legend - Containers"]
+        LegendUser["Users & External Services"]
+        LegendWeb["Static Web Content"]
+        LegendWorker["Cloudflare Workers"]
+        LegendData["Data & Infrastructure"]
+    end
+
+    %% Styling
+    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef webFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef workerFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef dataFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+
+    class User,EmailClient,CFTurnstile,SMTPService userFlow
+    class WebForm,NewsletterNext webFlow
+    class APIWorker,EmailWorker workerFlow
+    class D1DB,EmailQueue dataFlow
+    class Legend,LegendUser,LegendWeb,LegendWorker,LegendData legendBox
+    
+    %% Apply legend colors
+    class LegendUser userFlow
+    class LegendWeb webFlow
+    class LegendWorker workerFlow
+    class LegendData dataFlow
