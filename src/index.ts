@@ -14,6 +14,18 @@ interface Env {
   EMAIL_VERIFICATION_QUEUE: Queue;
 }
 
+interface SubscriptionData {
+  email: string;
+  verificationToken: string;
+  subscriptionTimestamp: string;
+  metadata: {
+    ipAddress: string;
+    userAgent: string;
+    country: string;
+    city: string;
+  };
+}
+
 // CORS configuration
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': 'https://www.rnwolf.net',
@@ -22,6 +34,18 @@ const CORS_HEADERS = {
   'Access-Control-Max-Age': '86400',
   'Content-Type': 'application/json'
 };
+
+// Helper function to generate a verification token
+function generateVerificationToken(email: string, secretKey: string): string {
+
+  console.log('generateVerificationToken called with:', { email, secretKey, secretKeyType: typeof secretKey });
+
+  const crypto = require('crypto');
+  const timestamp = Date.now().toString();
+  const message = `${email}:${timestamp}`;
+  const token = crypto.createHmac('sha256', secretKey).update(message).digest('hex');
+  return Buffer.from(`${token}:${timestamp}`).toString('base64url');
+}
 
 // Helper function to generate request ID
 function generateRequestId(): string {
@@ -50,158 +74,225 @@ function createCORSResponse(body: any, status: number = 200): Response {
 }
 
 // Function to handle newsletter subscription with observability
-async function handleSubscription(request: Request, env: Env, observability: WorkerObservability): Promise<Response> {
-  const monitor = PerformanceMonitor.getInstance(observability);
+async function handleSubscription(
+  email: string,
+  metadata: SubscriptionData['metadata'],
+  env: Env
+): Promise<{ success: boolean; subscriber: any; isNewSubscriber: boolean }> {
 
-  return await monitor.monitorRequest('POST', '/v1/newsletter/subscribe', async () => {
-    console.log('handleSubscription called', { method: request.method, url: request.url });
+  const now = new Date().toISOString();
 
-    if (request.method !== 'POST') {
-      console.log('Method not allowed:', request.method);
-      observability.recordMetric('newsletter.subscription.errors', 1, {
-        error_type: 'method_not_allowed'
-      });
-      return createCORSResponse({
-        success: false,
-        message: 'Method not allowed'
-      }, 405);
-    }
+  console.log('About to call generateVerificationToken with:', {
+    email,
+    secretKey: env.HMAC_SECRET_KEY,
+    secretKeyType: typeof env.HMAC_SECRET_KEY
+  });
 
-    try {
-      console.log('Parsing request body...');
-      const body = await request.json() as { email: string; turnstileToken?: string };
-      console.log('Request body parsed:', { email: body.email, hasTurnstileToken: !!body.turnstileToken });
+  const verificationToken = generateVerificationToken(email, env.HMAC_SECRET_KEY);
 
-      if (!body.email) {
-        console.log('No email provided');
-        observability.recordMetric('newsletter.subscription.errors', 1, {
-          error_type: 'missing_email'
-        });
-        return createCORSResponse({
-          success: false,
-          message: 'Email address is required'
-        }, 400);
-      }
+  try {
+    // First, check if subscriber exists and their current status
+    const existingSubscriber = await env.DB.prepare(
+      'SELECT email, subscribed_at, unsubscribed_at, email_verified, verified_at FROM subscribers WHERE email = ?'
+    ).bind(email).first();
 
-      // Turnstile verification with monitoring
-      if (body.turnstileToken) {
-        console.log('Verifying Turnstile token...');
-        const turnstileValid = await monitor.monitorExternalCall('turnstile', 'verify', async () => {
-          return await verifyTurnstile(body.turnstileToken!, env.TURNSTILE_SECRET_KEY);
-        });
+    if (!existingSubscriber) {
+      // Scenario 1: Brand new subscriber
+      console.log(`New subscriber: ${email}`);
 
-        console.log('Turnstile verification result:', turnstileValid);
-        observability.recordMetric('newsletter.turnstile.verifications', 1, {
-          result: turnstileValid ? 'success' : 'failure'
-        });
+      await env.DB.prepare(`
+        INSERT INTO subscribers (
+          email, subscribed_at, unsubscribed_at,
+          email_verified, verification_token, verification_sent_at, verified_at,
+          ip_address, user_agent, country, city,
+          created_at, updated_at
+        ) VALUES (?, ?, NULL, 0, ?, ?, NULL, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).bind(
+        email, now, verificationToken, now,
+        metadata.ipAddress, metadata.userAgent, metadata.country, metadata.city
+      ).run();
 
-        if (!turnstileValid) {
-          observability.recordMetric('newsletter.subscription.errors', 1, {
-            error_type: 'turnstile_failed'
-          });
-          return createCORSResponse({
-            success: false,
-            message: 'Please complete the security verification. If you\'re having trouble, visit our troubleshooting guide for help.',
-            troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
-          }, 400);
-        }
-      } else {
-        console.log('No Turnstile token provided - proceeding without verification');
-        observability.recordMetric('newsletter.turnstile.skipped', 1);
-      }
+      const newSubscriber = await env.DB.prepare(
+        'SELECT * FROM subscribers WHERE email = ?'
+      ).bind(email).first();
 
-      // Email validation
-      const email = body.email.trim().toLowerCase();
-      console.log('Normalized email:', email);
+      return { success: true, subscriber: newSubscriber, isNewSubscriber: true };
 
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email) || email.length > 254) {
-        console.log('Invalid email format:', email);
-        observability.recordMetric('newsletter.subscription.errors', 1, {
-          error_type: 'invalid_email'
-        });
-        return createCORSResponse({
-          success: false,
-          message: 'Invalid email address'
-        }, 400);
-      }
+    } else {
+      // Existing subscriber - determine scenario and handle appropriately
+      const isCurrentlyUnsubscribed = existingSubscriber.unsubscribed_at !== null;
+      const isCurrentlyVerified = Boolean(existingSubscriber.email_verified);
 
-      // Extract metadata
-      const now = new Date().toISOString();
-      const ipAddress = request.headers.get('CF-Connecting-IP') || '';
-      const userAgent = request.headers.get('User-Agent') || '';
-      const country = request.headers.get('CF-IPCountry') || '';
+      console.log(`Existing subscriber: ${email}, unsubscribed: ${isCurrentlyUnsubscribed}, verified: ${isCurrentlyVerified}`);
 
-      console.log('Metadata extracted:', { now, ipAddress, userAgent, country });
+      if (isCurrentlyUnsubscribed) {
+        // Scenario 2: Previously unsubscribed user resubscribing
+        console.log(`Resubscribing previously unsubscribed user: ${email}`);
 
-      // Database operation with monitoring
-      console.log('Attempting database insert...');
-      await monitor.monitorDatabaseOperation('insert_subscriber', async () => {
-        return await env.DB.prepare(`
-          INSERT INTO subscribers (email, subscribed_at, unsubscribed_at, ip_address, user_agent, country, city)
-          VALUES (?, ?, NULL, ?, ?, ?, '')
-          ON CONFLICT(email) DO UPDATE SET
+        await env.DB.prepare(`
+          UPDATE subscribers
+          SET
             subscribed_at = ?,
             unsubscribed_at = NULL,
+            email_verified = 0,              -- Reset to unverified (they need to verify again)
+            verification_token = ?,          -- New verification token
+            verification_sent_at = ?,        -- New sent timestamp
+            verified_at = NULL,              -- Clear previous verification timestamp
+            ip_address = ?,                  -- Update metadata
+            user_agent = ?,
+            country = ?,
+            city = ?,
             updated_at = CURRENT_TIMESTAMP
-        `).bind(email, now, ipAddress, userAgent, country, now).run();
-      });
+          WHERE email = ?
+        `).bind(
+          now, verificationToken, now,
+          metadata.ipAddress, metadata.userAgent, metadata.country, metadata.city,
+          email
+        ).run();
 
-      console.log('Database operation successful');
-      observability.recordMetric('newsletter.subscriptions', 1, {
-        country: country || 'unknown'
-      });
+      } else if (isCurrentlyVerified) {
+        // Scenario 3: Previously verified user resubscribing (maybe they forgot they were subscribed)
+        console.log(`Resubscribing previously verified user: ${email} - resetting verification status`);
 
-      return createCORSResponse({
-        success: true,
-        message: 'Thank you for subscribing! You\'ll receive our monthly newsletter with interesting content and links.'
-      });
+        await env.DB.prepare(`
+          UPDATE subscribers
+          SET
+            subscribed_at = ?,               -- Update subscription timestamp
+            email_verified = 0,              -- Reset to unverified
+            verification_token = ?,          -- New verification token
+            verification_sent_at = ?,        -- New sent timestamp
+            verified_at = NULL,              -- Clear previous verification timestamp
+            ip_address = ?,                  -- Update metadata
+            user_agent = ?,
+            country = ?,
+            city = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE email = ?
+        `).bind(
+          now, verificationToken, now,
+          metadata.ipAddress, metadata.userAgent, metadata.country, metadata.city,
+          email
+        ).run();
 
-    } catch (error) {
-      console.error('Subscription error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined
-      });
+      } else {
+        // Scenario 4: Existing unverified user subscribing again
+        console.log(`Updating existing unverified user: ${email} - generating new token`);
 
-      // Record error metrics
-      observability.recordMetric('newsletter.subscription.errors', 1, {
-        error_type: 'internal_error'
-      });
-
-      // Check for database-specific errors
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorName = error instanceof Error ? error.name : undefined;
-
-      if (errorMessage?.includes('Database unavailable') ||
-          errorMessage?.includes('D1_ERROR') ||
-          errorMessage?.includes('database') ||
-          errorName === 'DatabaseError') {
-
-        observability.recordMetric('newsletter.database.errors', 1);
-        return createCORSResponse({
-          success: false,
-          message: 'Our subscription service is temporarily unavailable for maintenance. Please try again later.'
-        }, 503);
+        await env.DB.prepare(`
+          UPDATE subscribers
+          SET
+            subscribed_at = ?,               -- Update subscription timestamp
+            verification_token = ?,          -- New verification token
+            verification_sent_at = ?,        -- New sent timestamp
+            ip_address = ?,                  -- Update metadata
+            user_agent = ?,
+            country = ?,
+            city = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE email = ?
+        `).bind(
+          now, verificationToken, now,
+          metadata.ipAddress, metadata.userAgent, metadata.country, metadata.city,
+          email
+        ).run();
       }
 
-      // Handle Turnstile verification errors specifically
-      if (errorMessage?.includes('Turnstile') || errorMessage?.includes('verification')) {
-        return createCORSResponse({
-          success: false,
-          message: 'Please complete the security verification. If you\'re having trouble, visit our troubleshooting guide for help.',
-          troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
-        }, 400);
-      }
+      // Get updated subscriber data
+      const updatedSubscriber = await env.DB.prepare(
+        'SELECT * FROM subscribers WHERE email = ?'
+      ).bind(email).first();
 
-      // Generic error for all other cases
-      return createCORSResponse({
-        success: false,
-        message: 'An error occurred while processing your subscription. Please try again.',
-        debug: env.ENVIRONMENT === 'staging' ? errorMessage : undefined
-      }, 500);
+      return { success: true, subscriber: updatedSubscriber, isNewSubscriber: false };
     }
-  });
+
+  } catch (error) {
+    console.error('Database error in handleSubscription:', error);
+    throw error;
+  }
+}
+
+// Main subscription handler with email verification support
+export async function processSubscription(
+  email: string,
+  turnstileToken: string,
+  request: Request,
+  env: Env
+): Promise<Response> {
+
+  try {
+    // Extract metadata from request
+    const metadata = {
+      ipAddress: request.headers.get('CF-Connecting-IP') || '',
+      userAgent: request.headers.get('User-Agent') || '',
+      country: request.headers.get('CF-IPCountry') || '',
+      city: request.headers.get('CF-IPCity') || ''
+    };
+
+    // Verify Turnstile if token provided (uses existing verifyTurnstile function)
+    if (turnstileToken) {
+      const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET_KEY);
+      if (!turnstileValid) {
+        const response = new Response(JSON.stringify({
+          success: false,
+          message: 'Please complete the security verification.',
+          troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
+        }), { status: 400 });
+
+        return addCORSHeaders(response, request);
+      }
+    }
+
+    // Handle the subscription
+    const result = await handleSubscription(email, metadata, env);
+
+    // Queue verification email (for all scenarios - new and existing users need to verify)
+    if (env.EMAIL_VERIFICATION_QUEUE) {
+      try {
+        await env.EMAIL_VERIFICATION_QUEUE.send({
+          email: email,
+          verificationToken: result.subscriber.verification_token,
+          metadata: metadata,
+          subscriptionTimestamp: result.subscriber.subscribed_at
+        });
+
+        console.log(`Verification email queued for: ${email}`);
+      } catch (queueError) {
+        console.error('Failed to queue verification email:', queueError);
+        // Continue with success response - email verification can be retried
+      }
+    }
+
+    // Return appropriate success message
+    const message = result.isNewSubscriber
+      ? 'Thank you for subscribing! Please check your email and click the verification link to confirm your subscription.'
+      : 'Thank you for subscribing! Please check your email and click the verification link to confirm your subscription.';
+
+    const response = new Response(JSON.stringify({
+      success: true,
+      message: message
+    }), { status: 200 });
+
+    return addCORSHeaders(response, request);
+
+  } catch (error) {
+    console.error('Subscription processing error:', error);
+
+    if (error.message?.includes('Database') || error.name === 'DatabaseError') {
+      const response = new Response(JSON.stringify({
+        success: false,
+        message: 'Our subscription service is temporarily unavailable. Please try again later.'
+      }), { status: 503 });
+
+      return addCORSHeaders(response, request);
+    }
+
+    const response = new Response(JSON.stringify({
+      success: false,
+      message: 'An error occurred while processing your subscription. Please try again.'
+    }), { status: 500 });
+
+    return addCORSHeaders(response, request);
+  }
 }
 
 // Add Turnstile verification function (unchanged)

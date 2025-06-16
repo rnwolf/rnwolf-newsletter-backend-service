@@ -141,7 +141,7 @@ describe(`Email Verification Tests (${TEST_ENV} environment)`, () => {
         expect(subscriber).toBeTruthy();
         if (subscriber) {
           expect(subscriber.email).toBe(testEmail);
-          expect(subscriber.email_verified).toBe(false);
+          expect(Boolean(subscriber.email_verified)).toBe(false);
           expect(subscriber.verification_token).toBeTruthy();
           expect(subscriber.verification_sent_at).toBeTruthy();
           expect(subscriber.verified_at).toBeNull();
