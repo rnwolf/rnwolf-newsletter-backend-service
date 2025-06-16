@@ -1,4 +1,4 @@
-// src/index.ts - Updated with observability
+// src/index.ts - Corrected version with proper function routing
 import { handleUnsubscribe } from './unsubscribe-handler';
 import { handleEmailVerification } from './email-verification-handler';
 import { handleEmailVerificationQueue } from './email-verification-worker';
@@ -37,8 +37,11 @@ const CORS_HEADERS = {
 
 // Helper function to generate a verification token
 function generateVerificationToken(email: string, secretKey: string): string {
-
-  console.log('generateVerificationToken called with:', { email, secretKey, secretKeyType: typeof secretKey });
+  console.log('generateVerificationToken called with:', {
+    email,
+    secretKey: secretKey ? `${secretKey.substring(0, 8)}...` : 'undefined',
+    secretKeyType: typeof secretKey
+  });
 
   const crypto = require('crypto');
   const timestamp = Date.now().toString();
@@ -50,6 +53,17 @@ function generateVerificationToken(email: string, secretKey: string): string {
 // Helper function to generate request ID
 function generateRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+}
+
+// Helper function to normalize email addresses
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// Helper function to validate email addresses
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 254;
 }
 
 // Helper function to add CORS headers to any response
@@ -73,8 +87,8 @@ function createCORSResponse(body: any, status: number = 200): Response {
   });
 }
 
-// Function to handle newsletter subscription with observability
-async function handleSubscription(
+// Database helper function - handles the subscription logic
+async function handleSubscriptionInDatabase(
   email: string,
   metadata: SubscriptionData['metadata'],
   env: Env
@@ -84,7 +98,7 @@ async function handleSubscription(
 
   console.log('About to call generateVerificationToken with:', {
     email,
-    secretKey: env.HMAC_SECRET_KEY,
+    secretKey: env.HMAC_SECRET_KEY ? `${env.HMAC_SECRET_KEY.substring(0, 8)}...` : 'undefined',
     secretKeyType: typeof env.HMAC_SECRET_KEY
   });
 
@@ -206,13 +220,31 @@ async function handleSubscription(
     }
 
   } catch (error) {
-    console.error('Database error in handleSubscription:', error);
+    console.error('Database error in handleSubscriptionInDatabase:', error);
     throw error;
   }
 }
 
-// Main subscription handler with email verification support
-export async function processSubscription(
+// Turnstile verification function
+async function verifyTurnstile(token: string, secretKey: string): Promise<boolean> {
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${secretKey}&response=${token}`
+    });
+
+    const result = await response.json() as { success: boolean };
+    return result.success;
+
+  } catch (error) {
+    console.error('Turnstile verification error:', error instanceof Error ? error.message : String(error));
+    return false;
+  }
+}
+
+// Main subscription processing function
+async function processSubscription(
   email: string,
   turnstileToken: string,
   request: Request,
@@ -228,22 +260,20 @@ export async function processSubscription(
       city: request.headers.get('CF-IPCity') || ''
     };
 
-    // Verify Turnstile if token provided (uses existing verifyTurnstile function)
+    // Verify Turnstile if token provided
     if (turnstileToken) {
       const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET_KEY);
       if (!turnstileValid) {
-        const response = new Response(JSON.stringify({
+        return createCORSResponse({
           success: false,
           message: 'Please complete the security verification.',
           troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
-        }), { status: 400 });
-
-        return addCORSHeaders(response, request);
+        }, 400);
       }
     }
 
     // Handle the subscription
-    const result = await handleSubscription(email, metadata, env);
+    const result = await handleSubscriptionInDatabase(email, metadata, env);
 
     // Queue verification email (for all scenarios - new and existing users need to verify)
     if (env.EMAIL_VERIFICATION_QUEUE) {
@@ -251,8 +281,8 @@ export async function processSubscription(
         await env.EMAIL_VERIFICATION_QUEUE.send({
           email: email,
           verificationToken: result.subscriber.verification_token,
-          metadata: metadata,
-          subscriptionTimestamp: result.subscriber.subscribed_at
+          subscribedAt: result.subscriber.subscribed_at,
+          metadata: metadata
         });
 
         console.log(`Verification email queued for: ${email}`);
@@ -264,52 +294,89 @@ export async function processSubscription(
 
     // Return appropriate success message
     const message = result.isNewSubscriber
-      ? 'Thank you for subscribing! Please check your email and click the verification link to confirm your subscription.'
-      : 'Thank you for subscribing! Please check your email and click the verification link to confirm your subscription.';
+      ? 'Thank you for subscribing! Please check your email and click the verification link complete your subscription.'
+      : 'Thank you for subscribing! Please check your email and click the verification link to complete your subscription.';
 
-    const response = new Response(JSON.stringify({
+    return createCORSResponse({
       success: true,
       message: message
-    }), { status: 200 });
-
-    return addCORSHeaders(response, request);
+    });
 
   } catch (error) {
     console.error('Subscription processing error:', error);
 
-    if (error.message?.includes('Database') || error.name === 'DatabaseError') {
-      const response = new Response(JSON.stringify({
+    if (error instanceof Error && (error.message?.includes('Database') || error.name === 'DatabaseError')) {
+      return createCORSResponse({
         success: false,
         message: 'Our subscription service is temporarily unavailable. Please try again later.'
-      }), { status: 503 });
-
-      return addCORSHeaders(response, request);
+      }, 500);
     }
 
-    const response = new Response(JSON.stringify({
+    return createCORSResponse({
       success: false,
       message: 'An error occurred while processing your subscription. Please try again.'
-    }), { status: 500 });
-
-    return addCORSHeaders(response, request);
+    }, 500);
   }
 }
 
-// Add Turnstile verification function (unchanged)
-async function verifyTurnstile(token: string, secretKey: string): Promise<boolean> {
+// Request handler for subscription endpoint
+async function handleSubscriptionRequest(
+  request: Request,
+  env: Env,
+  observability: WorkerObservability
+): Promise<Response> {
+
+  console.log('handleSubscriptionRequest called');
+
+  if (request.method !== 'POST') {
+    return createCORSResponse({
+      success: false,
+      message: 'Method not allowed'
+    }, 405);
+  }
+
   try {
-    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `secret=${secretKey}&response=${token}`
+    // Parse request body
+    const requestData = await request.json() as {
+      email: string;
+      turnstileToken?: string;
+    };
+
+    console.log('Parsed request data:', {
+      email: requestData.email,
+      hasTurnstileToken: !!requestData.turnstileToken
     });
 
-    const result = await response.json() as { success: boolean };
-    return result.success;
+    if (!requestData.email) {
+      return createCORSResponse({
+        success: false,
+        message: 'Email address is required'
+      }, 400);
+    }
+
+    // Add email validation
+    const normalizedEmail = normalizeEmail(requestData.email);
+    if (!isValidEmail(normalizedEmail)) {
+      return createCORSResponse({
+        success: false,
+        message: 'Invalid email address'
+      }, 400);
+    }
+
+    // Call the subscription processing function with normalized email
+    return await processSubscription(
+      normalizedEmail,
+      requestData.turnstileToken || '',
+      request,
+      env
+    );
 
   } catch (error) {
-    console.error('Turnstile verification error:', error instanceof Error ? error.message : String(error));
-    return false;
+    console.error('Request parsing error:', error);
+    return createCORSResponse({
+      success: false,
+      message: 'Invalid request format'
+    }, 400);
   }
 }
 
@@ -409,9 +476,11 @@ export default {
         });
       }
 
-      // Newsletter subscription endpoint
+      // Newsletter subscription endpoint - CORRECTED
       if (url.pathname === '/v1/newsletter/subscribe') {
-        return handleSubscription(request, env, observability);
+        return await monitor.monitorRequest('POST', '/v1/newsletter/subscribe', async () => {
+          return handleSubscriptionRequest(request, env, observability);
+        });
       }
 
       // Newsletter unsubscribe endpoint
@@ -464,5 +533,10 @@ export default {
         });
       }
     }
+  },
+
+  // Queue consumer for email verification
+  async queue(batch: MessageBatch, env: Env): Promise<void> {
+    return await handleEmailVerificationQueue(batch, env);
   }
 };

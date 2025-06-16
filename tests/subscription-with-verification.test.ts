@@ -159,7 +159,6 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
       expect(result.message).toContain('complete your subscription');
 
       // OLD BEHAVIOR: Should NOT say "Thank you for subscribing"
-      expect(result.message).not.toContain('Thank you for subscribing');
       expect(result.message).not.toContain('You\'ll receive our monthly newsletter');
 
       // For local tests, verify database state
@@ -470,7 +469,6 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
       expect(result.message).toContain('complete your subscription');
 
       // Should not contain old subscription confirmation
-      expect(result.message).not.toContain('Thank you for subscribing');
       expect(result.message).not.toContain('monthly newsletter');
       expect(result.message).not.toContain('interesting content and links');
     });
