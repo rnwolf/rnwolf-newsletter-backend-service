@@ -16,7 +16,7 @@
     "deploy:production:full": "./scripts/deploy.sh production",
     "deploy:quick": "./scripts/quick-deploy.sh",
     "deploy:cleanup": "./scripts/deploy.sh production --cleanup-only",
-    "test": "vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
+    "test": "vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts tests/email-verification-endpoint.test.ts",
     "test:watch": "vitest tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
     "test:unit": "vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/email-verification.test.ts",
     "test:integration": "vitest run tests/integration.test.ts tests/email-verification-integration.test.ts",

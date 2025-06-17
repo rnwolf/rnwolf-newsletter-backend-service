@@ -14,33 +14,34 @@ function generateVerificationToken(email: string, secretKey: string): string {
 
 describe('Email Verification Endpoint Tests', () => {
   beforeEach(async () => {
-    // Setup test database
-    await env.DB.exec(`
-      DROP TABLE IF EXISTS subscribers;
-      CREATE TABLE subscribers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE NOT NULL,
-        subscribed_at DATETIME NOT NULL,
-        unsubscribed_at DATETIME NULL,
-        email_verified BOOLEAN DEFAULT FALSE,
-        verification_token TEXT DEFAULT NULL,
-        verification_sent_at DATETIME DEFAULT NULL,
-        verified_at DATETIME DEFAULT NULL,
-        ip_address TEXT,
-        user_agent TEXT,
-        country TEXT,
-        city TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX idx_verification_token ON subscribers(verification_token);
-      CREATE INDEX idx_email_verified ON subscribers(email_verified);
-    `);
+    // Set test environment variables
+    if (!env.HMAC_SECRET_KEY) {
+      // Set a test secret key if not already set
+      env.HMAC_SECRET_KEY = 'test-secret';
+    }
+
+    // Setup test database - execute each statement separately
+    try {
+      // Drop table if exists
+      await env.DB.exec('DROP TABLE IF EXISTS subscribers');
+    } catch (error) {
+      // Table might not exist, which is fine
+      console.log('Table subscribers does not exist, continuing...');
+    }
+
+    // Create table - use single line to avoid multiline template literal issues
+    const createTableSQL = 'CREATE TABLE subscribers (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, subscribed_at DATETIME NOT NULL, unsubscribed_at DATETIME NULL, email_verified BOOLEAN DEFAULT FALSE, verification_token TEXT DEFAULT NULL, verification_sent_at DATETIME DEFAULT NULL, verified_at DATETIME DEFAULT NULL, ip_address TEXT, user_agent TEXT, country TEXT, city TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)';
+
+    await env.DB.exec(createTableSQL);
+
+    // Create indexes separately
+    await env.DB.exec('CREATE INDEX idx_verification_token ON subscribers(verification_token)');
+    await env.DB.exec('CREATE INDEX idx_email_verified ON subscribers(email_verified)');
   });
 
   it('should verify valid email verification token', async () => {
     const testEmail = 'verify-test@example.com';
-    const verificationToken = generateVerificationToken(testEmail, env.HMAC_SECRET_KEY || 'test-secret');
+    const verificationToken = generateVerificationToken(testEmail, 'test-secret');
 
     // Insert unverified subscriber
     await env.DB.prepare(`
@@ -53,6 +54,15 @@ describe('Email Verification Endpoint Tests', () => {
       new Request(`http://localhost:8787/v1/newsletter/verify?token=${verificationToken}&email=${encodeURIComponent(testEmail)}`),
       env
     );
+
+    // Debug: Log the response details if it's not 200
+    if (response.status !== 200) {
+      const responseText = await response.clone().text();
+      console.log('Response status:', response.status);
+      console.log('Response body:', responseText);
+      console.log('Generated token:', verificationToken);
+      console.log('Test email:', testEmail);
+    }
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
@@ -100,7 +110,7 @@ describe('Email Verification Endpoint Tests', () => {
     const expiredTimestamp = (Date.now() - 25 * 60 * 60 * 1000).toString();
     const crypto = require('crypto');
     const message = `${testEmail}:${expiredTimestamp}`;
-    const tokenHash = crypto.createHmac('sha256', env.HMAC_SECRET_KEY || 'test-secret').update(message).digest('hex');
+    const tokenHash = crypto.createHmac('sha256', 'test-secret').update(message).digest('hex');
     const expiredToken = Buffer.from(`${tokenHash}:${expiredTimestamp}`).toString('base64url');
 
     // Insert unverified subscriber
@@ -123,7 +133,7 @@ describe('Email Verification Endpoint Tests', () => {
 
   it('should handle already verified email', async () => {
     const testEmail = 'already-verified@example.com';
-    const verificationToken = generateVerificationToken(testEmail, env.HMAC_SECRET_KEY || 'test-secret');
+    const verificationToken = generateVerificationToken(testEmail, 'test-secret');
 
     // Insert already verified subscriber
     await env.DB.prepare(`
@@ -146,7 +156,7 @@ describe('Email Verification Endpoint Tests', () => {
 
   it('should handle non-existent email', async () => {
     const testEmail = 'nonexistent@example.com';
-    const verificationToken = generateVerificationToken(testEmail, env.HMAC_SECRET_KEY || 'test-secret');
+    const verificationToken = generateVerificationToken(testEmail, 'test-secret');
 
     // Test verification without inserting subscriber
     const response = await worker.fetch(

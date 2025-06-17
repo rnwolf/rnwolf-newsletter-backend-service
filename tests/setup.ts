@@ -1,6 +1,29 @@
 // tests/setup.ts - Fixed version without readFileSync
 import { env } from 'cloudflare:test';
 
+// Set up test environment variables before any tests run
+console.log('Setting up test environment...');
+
+// Ensure environment variables are set
+if (!env.HMAC_SECRET_KEY) {
+  env.HMAC_SECRET_KEY = 'test-secret';
+}
+
+if (!env.TURNSTILE_SECRET_KEY) {
+  env.TURNSTILE_SECRET_KEY = 'test-turnstile-secret';
+}
+
+if (!env.ENVIRONMENT) {
+  env.ENVIRONMENT = 'local';
+}
+
+console.log('✓ Test environment setup complete', {
+  hasHmacSecret: !!env.HMAC_SECRET_KEY,
+  hasTurnstileSecret: !!env.TURNSTILE_SECRET_KEY,
+  environment: env.ENVIRONMENT
+});
+
+
 export async function setupTestDatabase(testEnv: any) {
   try {
     console.log('Setting up test database with email verification schema...');

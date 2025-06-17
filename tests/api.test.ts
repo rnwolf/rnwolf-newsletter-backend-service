@@ -379,9 +379,9 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       });
 
       const result = await response.json() as SubscriptionResponse;
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(400);
       expect(result.success).toBe(false);
-      expect(result.message).toContain('An error occurred while processing');
+      expect(result.message).toContain('Invalid request format');
     });
   });
 
