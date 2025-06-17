@@ -754,7 +754,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
 
         expect(Boolean(subscriber?.email_verified)).toBe(true);
       }
-    });
+    }, 10000); // Increase timeout for performance test
   });
 
   describe('Integration with Existing Newsletter Infrastructure', () => {

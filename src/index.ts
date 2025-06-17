@@ -66,6 +66,7 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email) && email.length <= 254;
 }
 
+
 // Helper function to add CORS headers to any response
 function addCORSHeaders(response: Response): Response {
   const newResponse = new Response(response.body, {
@@ -80,12 +81,25 @@ function addCORSHeaders(response: Response): Response {
 }
 
 // Helper function to create a response with CORS headers
-function createCORSResponse(body: any, status: number = 200): Response {
+function createCORSResponse(body: any, status: number = 200, endpoint?: string): Response {
+  // Use permissive CORS for email-related endpoints
+  const isEmailEndpoint = endpoint === '/v1/newsletter/verify' || endpoint === '/v1/newsletter/unsubscribe';
+
+  const headers = isEmailEndpoint ? {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+    'Content-Type': 'application/json'
+  } : CORS_HEADERS;
+
   return new Response(JSON.stringify(body), {
     status,
-    headers: CORS_HEADERS
+    headers
   });
 }
+
+
 
 // Database helper function - handles the subscription logic
 async function handleSubscriptionInDatabase(
@@ -414,8 +428,8 @@ export default {
       if (request.method === 'OPTIONS') {
         const url = new URL(request.url);
 
-        // Unsubscribe endpoint allows any origin (for email client compatibility)
-        if (url.pathname === '/v1/newsletter/unsubscribe') {
+        // Email verification and unsubscribe endpoints allow any origin (for email client compatibility)
+        if (url.pathname === '/v1/newsletter/unsubscribe' || url.pathname === '/v1/newsletter/verify') {
           return new Response(null, {
             status: 200,
             headers: {
@@ -471,7 +485,7 @@ export default {
               message: 'Database connection failed',
               error: error instanceof Error ? error.message : String(error),
               requestId
-            }, 500);
+            }, 500, url.pathname); // Pass the endpoint path
           }
         });
       }
@@ -507,7 +521,7 @@ export default {
         error: 'Not Found',
         path: url.pathname,
         requestId
-      }, 404);
+      }, 404, url.pathname); // Pass the endpoint path
 
     } catch (error) {
       console.error(`[${requestId}] Unhandled error:`, error);

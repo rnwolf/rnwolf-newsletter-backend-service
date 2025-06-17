@@ -10,6 +10,12 @@ interface Env {
 export async function handleEmailVerification(request: Request, env: Env): Promise<Response> {
   console.log('handleEmailVerification called', { method: request.method, url: request.url });
 
+  const permissiveCORSHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  };
+
   // Only accept GET requests
   if (request.method !== 'GET') {
     return generateErrorResponse(

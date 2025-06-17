@@ -419,7 +419,7 @@ describe(`Email Verification Tests (${TEST_ENV} environment)`, () => {
       const token1 = generateTestVerificationToken(email, secret);
 
       // Wait a bit to ensure different timestamp
-      await new Promise(resolve => setTimeout(resolve, 30));
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       const token2 = generateTestVerificationToken(email, secret);
 

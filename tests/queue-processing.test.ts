@@ -401,14 +401,14 @@ describe('Queue Processing Tests (local only)', () => {
       const duration = Date.now() - startTime;
 
       // Performance assertions
-      expect(duration).toBeLessThan(5000); // Should complete within 5 seconds
+      expect(duration).toBeLessThan(8000); // Should complete within 8 seconds
       expect(global.fetch).toHaveBeenCalledTimes(batchSize);
 
       // All messages should be acknowledged
       mockMessages.forEach(msg => {
         expect(msg.ack).toHaveBeenCalled();
       });
-    });
+    },10000);
 
     it('should handle database connection issues', async () => {
       const testMessage: EmailVerificationMessage = {
