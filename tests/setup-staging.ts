@@ -1,35 +1,31 @@
-// tests/setup.ts - Local development setup for Vitest with Cloudflare Workers
+// tests/setup-staging.ts - Staging development setup for Vitest with Cloudflare Workers
 import { env } from 'cloudflare:test';
 
 // Set up test environment variables before any tests run
-console.log('Setting up local test environment...');
+console.log('Setting staging test environment...');
 
-// For local testing, we can use test secrets safely
-const LOCAL_TEST_SECRETS = {
-  HMAC_SECRET_KEY: 'local-test-secret-key-for-development-only',
-  TURNSTILE_SECRET_KEY: 'local-test-turnstile-key-for-development-only'
-};
-
-// Set up environment variables for local testing
+// For staging, secrets should come from actual Cloudflare environment
+// We only validate they exist, don't set fallbacks
 if (!env.HMAC_SECRET_KEY) {
-  env.HMAC_SECRET_KEY = LOCAL_TEST_SECRETS.HMAC_SECRET_KEY;
+  throw new Error('HMAC_SECRET_KEY not found in staging environment. Please set via: npx wrangler secret put HMAC_SECRET_KEY --env staging');
 }
 
 if (!env.TURNSTILE_SECRET_KEY) {
-  env.TURNSTILE_SECRET_KEY = LOCAL_TEST_SECRETS.TURNSTILE_SECRET_KEY;
+  throw new Error('TURNSTILE_SECRET_KEY not found in staging environment. Please set via: npx wrangler secret put TURNSTILE_SECRET_KEY --env staging');
 }
 
 if (!env.ENVIRONMENT) {
-  env.ENVIRONMENT = 'local';
+  env.ENVIRONMENT = 'staging';
 }
 
-console.log('✓ Local test environment setup complete');
+console.log('✓ Staging test environment validated');
 
-console.log('✓ Test environment setup complete', {
-  hasHmacSecret: !!env.HMAC_SECRET_KEY,
-  hasTurnstileSecret: !!env.TURNSTILE_SECRET_KEY,
-  environment: env.ENVIRONMENT
-});
+
+// console.log('✓ Test environment setup complete', {
+//   hasHmacSecret: !!env.HMAC_SECRET_KEY,
+//   hasTurnstileSecret: !!env.TURNSTILE_SECRET_KEY,
+//   environment: env.ENVIRONMENT
+// });
 
 
 export async function setupTestDatabase(testEnv: any) {

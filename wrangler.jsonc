@@ -23,10 +23,10 @@
         "ENVIRONMENT": "local",
         "API_BASE_URL": "http://localhost:8787",
         "CORS_ORIGIN": "http://localhost:3000",
-        "API_VERSION": "v1",
-          "HMAC_SECRET_KEY": "test-secret",
-          "GRAFANA_API_KEY": "local-test-key"
+        "API_VERSION": "v1"
       },
+      // Secrets are set via: npx wrangler secret put HMAC_SECRET_KEY --env staging
+      // Secrets are set via: npx wrangler secret put TURNSTILE_SECRET_KEY --env staging
       "queues": {
         "producers": [
           {
@@ -110,6 +110,8 @@
         "CORS_ORIGIN": "https://www.rnwolf.net",
         "API_VERSION": "v1"
       },
+      // Secrets are set via: npx wrangler secret put HMAC_SECRET_KEY --env production
+      // Secrets are set via: npx wrangler secret put TURNSTILE_SECRET_KEY --env production
       "queues": {
         "producers": [
           {

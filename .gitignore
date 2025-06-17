@@ -9,9 +9,13 @@ node_modules/
 .env.staging
 .env.production
 
-# Grafana tokens
+# Grafana tokens and backups
 *grafana*token*
+.grafana-tokens-*.env
 *grafana*key*
+
+# Temporary files
+/tmp/dashboard_*.json
 
 # Build outputs
 dist/

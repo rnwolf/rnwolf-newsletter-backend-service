@@ -213,7 +213,7 @@ describe(`Email Verification Tests (${TEST_ENV} environment)`, () => {
       ).bind(testEmail).first() as DatabaseRow | null;
 
       expect(subscriber?.unsubscribed_at).toBeNull();
-      expect(subscriber?.email_verified).toBe(false);
+      expect(Boolean(subscriber?.email_verified)).toBe(false);
       expect(subscriber?.verification_token).toBeTruthy();
     });
   });
@@ -248,7 +248,7 @@ describe(`Email Verification Tests (${TEST_ENV} environment)`, () => {
         'SELECT * FROM subscribers WHERE email = ?'
       ).bind(testEmail).first() as DatabaseRow | null;
 
-      expect(subscriber?.email_verified).toBe(true);
+      expect(Boolean(subscriber?.email_verified)).toBe(true);
       expect(subscriber?.verified_at).toBeTruthy();
       expect(subscriber?.verification_token).toBeNull();
     });
@@ -419,7 +419,7 @@ describe(`Email Verification Tests (${TEST_ENV} environment)`, () => {
       const token1 = generateTestVerificationToken(email, secret);
 
       // Wait a bit to ensure different timestamp
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 30));
 
       const token2 = generateTestVerificationToken(email, secret);
 
