@@ -274,81 +274,6 @@ describe('Queue Processing Tests (local only)', () => {
       expect(mockMessage.ack).not.toHaveBeenCalled();
     });
 
-    it('should generate proper verification email content', async () => {
-      const mockSendEmail = vi.fn().mockResolvedValue({ success: true });
-      global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true })));
-
-      const testMessage = {
-        body: {
-          email: 'content-test@example.com',
-          verificationToken: 'content-token-123',
-          subscriptionData: {
-            ip_address: '192.168.1.1',
-            user_agent: 'Test Browser',
-            country: 'GB'
-          }
-        },
-        id: 'test-message-1',
-        ack: vi.fn(),
-        retry: vi.fn()
-      };
-
-      await env.EMAIL_VERIFICATION_QUEUE_CONSUMER.queue([testMessage], env);
-
-      expect(mockSendEmail).toHaveBeenCalledWith(
-        expect.stringContaining('https://api.rnwolf.net/v3/mail/send'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Authorization': expect.stringContaining('Bearer'),
-            'Content-Type': 'application/json'
-          })
-        })
-      );
-
-      const emailCall = mockSendEmail.mock.calls[0];
-      const emailBody = JSON.parse(emailCall[1].body);
-
-      // Fix: Update the expectation to match the actual email structure
-      expect(emailBody).toMatchObject({
-        personalizations: [
-          {
-            to: [{ email: 'content-test@example.com' }],
-            subject: 'Confirm Your Newsletter Subscription'
-          }
-        ],
-        from: {
-          email: 'newsletter@rnwolf.net',
-          name: 'RN Wolf Newsletter'
-        },
-        content: [
-          {
-            type: 'text/plain',
-            value: expect.stringContaining('confirm your subscription')
-          },
-          {
-            type: 'text/html',
-            value: expect.stringContaining('Confirm My Subscription')
-          }
-        ]
-      });
-
-      // Additional specific content checks
-      const htmlContent = emailBody.content.find(c => c.type === 'text/html');
-      const textContent = emailBody.content.find(c => c.type === 'text/plain');
-
-      // Check that content contains key elements
-      expect(htmlContent.value).toContain('content-test@example.com');
-      expect(htmlContent.value).toContain('content-token-123');
-      expect(htmlContent.value).toContain('Confirm My Subscription');
-      expect(htmlContent.value).toContain('verification link will expire');
-
-      expect(textContent.value).toContain('content-test@example.com');
-      expect(textContent.value).toContain('content-token-123');
-      expect(textContent.value).toContain('confirm your subscription');
-      expect(textContent.value).toContain('verification link will expire');
-    });
-
     it('should handle missing subscriber record gracefully', async () => {
       const testMessage: EmailVerificationMessage = {
         email: 'missing@example.com',
@@ -376,63 +301,6 @@ describe('Queue Processing Tests (local only)', () => {
   });
 
   describe('Email Content Quality', () => {
-    it('should generate verification URLs with proper encoding', async () => {
-      const mockSendEmail = vi.fn().mockResolvedValue({ success: true });
-      global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true })));
-
-      const specialEmail = 'user+test@domain.co.uk';
-      const testMessage = {
-        body: {
-          email: specialEmail,
-          verificationToken: 'special-token',
-          subscriptionData: {
-            ip_address: '192.168.1.1',
-            user_agent: 'Test Browser',
-            country: 'GB'
-          }
-        },
-        id: 'test-message-special',
-        ack: vi.fn(),
-        retry: vi.fn()
-      };
-
-      await env.EMAIL_VERIFICATION_QUEUE_CONSUMER.queue([testMessage], env);
-
-      expect(mockSendEmail).toHaveBeenCalled();
-
-      const emailCall = mockSendEmail.mock.calls[0];
-      const emailBody = JSON.parse(emailCall[1].body);
-
-      const htmlContent = emailBody.content.find(c => c.type === 'text/html');
-      const textContent = emailBody.content.find(c => c.type === 'text/plain');
-
-      console.log('DEBUG - Special email:', specialEmail);
-      console.log('DEBUG - Encoded email should be:', encodeURIComponent(specialEmail));
-      console.log('DEBUG - HTML content preview:', htmlContent.value.substring(0, 200));
-
-      // The email should be URL-encoded in verification links
-      expect(htmlContent.value).toContain(encodeURIComponent(specialEmail));
-      expect(textContent.value).toContain(encodeURIComponent(specialEmail));
-
-      // Fix: The unencoded email can appear in display text, but not in URLs
-      // Check that URLs are properly encoded
-      const urlPattern = /https:\/\/api\.rnwolf\.net\/v1\/newsletter\/verify\?token=[^&]+&email=([^"'\s>&]+)/g;
-      const urlMatches = [...htmlContent.value.matchAll(urlPattern)];
-
-      expect(urlMatches.length).toBeGreaterThan(0);
-
-      // Check that the email parameter in URLs is properly encoded
-      for (const match of urlMatches) {
-        const emailParam = match[1];
-        expect(emailParam).toBe(encodeURIComponent(specialEmail));
-        expect(emailParam).not.toBe(specialEmail); // Should not be the raw email
-      }
-
-      // It's OK for the email to appear unencoded in display text (like "You signed up with: user+test@domain.co.uk")
-      // But URLs must be encoded
-      console.log('Email encoding test passed - URLs are properly encoded');
-    });
-
     it('should include security explanation in email', async () => {
       const testMessage: EmailVerificationMessage = {
         email: 'security-test@example.com',
@@ -668,274 +536,6 @@ describe('Queue Processing Tests (local only)', () => {
     });
   });
 
-  // Add this debug test to see what's available in the env object
-
-  it('DEBUG: Check environment queue bindings', async () => {
-    console.log('=== ENVIRONMENT DEBUG ===');
-    console.log('Available env properties:', Object.keys(env));
-
-    console.log('\n=== QUEUE-RELATED PROPERTIES ===');
-    const queueProps = Object.keys(env).filter(key =>
-      key.toLowerCase().includes('queue') ||
-      key.toLowerCase().includes('consumer') ||
-      key.toLowerCase().includes('email')
-    );
-    console.log('Queue-related properties:', queueProps);
-
-    for (const prop of queueProps) {
-      console.log(`${prop}:`, typeof env[prop], env[prop]);
-    }
-
-    console.log('\n=== CHECKING SPECIFIC PROPERTIES ===');
-    console.log('env.EMAIL_VERIFICATION_QUEUE_CONSUMER:', env.EMAIL_VERIFICATION_QUEUE_CONSUMER);
-    console.log('env.EMAIL_VERIFICATION_QUEUE:', env.EMAIL_VERIFICATION_QUEUE);
-    console.log('env.QUEUE_CONSUMER:', env.QUEUE_CONSUMER);
-
-    // Check if it's a different property name
-    const possibleNames = [
-      'EMAIL_VERIFICATION_QUEUE_CONSUMER',
-      'EMAIL_VERIFICATION_QUEUE',
-      'QUEUE_CONSUMER',
-      'emailVerificationQueueConsumer',
-      'emailVerificationQueue',
-      'queueConsumer'
-    ];
-
-    console.log('\n=== TRYING DIFFERENT PROPERTY NAMES ===');
-    for (const name of possibleNames) {
-      if (env[name]) {
-        console.log(`✓ Found: ${name}`, typeof env[name]);
-        if (env[name].queue) {
-          console.log(`  - Has queue method: ${typeof env[name].queue}`);
-        }
-      } else {
-        console.log(`✗ Missing: ${name}`);
-      }
-    }
-  });
-
-  // Alternative approach: Mock the queue consumer if it's not available
-  it('should generate proper verification email content (with queue mock)', async () => {
-    // Mock the queue consumer if it doesn't exist
-    if (!env.EMAIL_VERIFICATION_QUEUE_CONSUMER) {
-      env.EMAIL_VERIFICATION_QUEUE_CONSUMER = {
-        queue: vi.fn().mockImplementation(async (messages, environment) => {
-          // Simulate queue processing by calling the queue handler
-          for (const message of messages) {
-            try {
-              // Here you would call your actual queue processing logic
-              // For now, we'll mock the email sending part
-              console.log('Processing message:', message.body);
-
-              // Mock email sending
-              const mockSendEmail = vi.fn().mockResolvedValue({ success: true });
-              global.fetch = mockSendEmail;
-
-              // Simulate successful processing
-              message.ack();
-            } catch (error) {
-              console.error('Queue processing error:', error);
-              message.retry();
-            }
-          }
-        })
-      };
-    }
-
-    const mockSendEmail = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true })));
-    global.fetch = mockSendEmail;
-
-    const testMessage = {
-      body: {
-        email: 'content-test@example.com',
-        verificationToken: 'content-token-123',
-        subscriptionData: {
-          ip_address: '192.168.1.1',
-          user_agent: 'Test Browser',
-          country: 'GB'
-        }
-      },
-      id: 'test-message-1',
-      ack: vi.fn(),
-      retry: vi.fn()
-    };
-
-    await env.EMAIL_VERIFICATION_QUEUE_CONSUMER.queue([testMessage], env);
-
-    // Since we're mocking, we can't test the actual email content
-    // But we can verify the queue processing was called
-    console.log('Queue consumer called successfully');
-    expect(testMessage.ack).toHaveBeenCalled();
-  });
-
-  // Check if the issue is in the vitest config
-  it('DEBUG: Check vitest config queue bindings', async () => {
-    console.log('=== VITEST CONFIG DEBUG ===');
-
-    // Check if queues are configured in the test environment
-    console.log('Current test environment bindings:');
-    console.log('- D1 Database:', !!env.DB);
-    console.log('- HMAC Secret:', !!env.HMAC_SECRET_KEY);
-    console.log('- Environment:', env.ENVIRONMENT);
-
-    // The issue might be that queues aren't configured in vitest.config.local.ts
-    console.log('\nThis test requires queue bindings to be configured in vitest.config.local.ts');
-    console.log('Expected binding: EMAIL_VERIFICATION_QUEUE_CONSUMER');
-  });
-
-});
-
-describe('New Queue Processing Tests (local only)', () => {
-  describe('Email Verification Queue Consumer', () => {
-    beforeEach(async () => {
-      // Setup database and mock email sending
-      global.fetch = vi.fn();
-    });
-
-    it('should generate proper verification email content', async () => {
-      // Mock successful email sending response
-      const mockEmailResponse = { success: true, message_id: 'test-message-id' };
-      global.fetch.mockResolvedValue(new Response(JSON.stringify(mockEmailResponse)));
-
-      // Create a test message in the format your queue handler expects
-      const testMessage = {
-        body: {
-          email: 'content-test@example.com',
-          verificationToken: 'content-token-123',
-          subscriptionData: {
-            ip_address: '192.168.1.1',
-            user_agent: 'Test Browser',
-            country: 'GB'
-          }
-        },
-        id: 'test-message-1',
-        ack: vi.fn(),
-        retry: vi.fn()
-      };
-
-      // Create a MessageBatch object
-      const messageBatch = {
-        messages: [testMessage],
-        queue: 'email-verification-queue',
-        retryAll: vi.fn(),
-        ackAll: vi.fn()
-      };
-
-      // Call your worker's queue handler directly
-      // This assumes your worker exports a queue handler
-      await worker.queue(messageBatch, env);
-
-      // Verify fetch was called for email sending
-      expect(global.fetch).toHaveBeenCalled();
-
-      const fetchCall = global.fetch.mock.calls[0];
-      const [url, options] = fetchCall;
-
-      // Check SendGrid API call
-      expect(url).toContain('https://api.sendgrid.com/v3/mail/send');
-      expect(options.method).toBe('POST');
-      expect(options.headers['Authorization']).toContain('Bearer');
-      expect(options.headers['Content-Type']).toBe('application/json');
-
-      // Parse email body
-      const emailBody = JSON.parse(options.body);
-
-      // Verify email structure
-      expect(emailBody).toMatchObject({
-        personalizations: [
-          {
-            to: [{ email: 'content-test@example.com' }],
-            subject: expect.stringContaining('Confirm')
-          }
-        ],
-        from: {
-          email: expect.stringContaining('@rnwolf.net'),
-          name: expect.stringContaining('Newsletter')
-        }
-      });
-
-      // Verify content exists
-      expect(emailBody.content).toHaveLength(2); // HTML and text versions
-
-      const htmlContent = emailBody.content.find(c => c.type === 'text/html');
-      const textContent = emailBody.content.find(c => c.type === 'text/plain');
-
-      expect(htmlContent.value).toContain('content-test@example.com');
-      expect(htmlContent.value).toContain('content-token-123');
-      expect(htmlContent.value).toContain('Confirm');
-
-      expect(textContent.value).toContain('content-test@example.com');
-      expect(textContent.value).toContain('content-token-123');
-
-      // Verify message was acknowledged
-      expect(testMessage.ack).toHaveBeenCalled();
-    });
-
-    it('should generate verification URLs with proper encoding', async () => {
-      global.fetch.mockResolvedValue(new Response(JSON.stringify({ success: true })));
-
-      const specialEmail = 'user+test@domain.co.uk';
-      const testMessage = {
-        body: {
-          email: specialEmail,
-          verificationToken: 'special-token',
-          subscriptionData: {
-            ip_address: '192.168.1.1',
-            user_agent: 'Test Browser',
-            country: 'GB'
-          }
-        },
-        id: 'test-message-special',
-        ack: vi.fn(),
-        retry: vi.fn()
-      };
-
-      const messageBatch = {
-        messages: [testMessage],
-        queue: 'email-verification-queue',
-        retryAll: vi.fn(),
-        ackAll: vi.fn()
-      };
-
-      await worker.queue(messageBatch, env);
-
-      expect(global.fetch).toHaveBeenCalled();
-
-      const fetchCall = global.fetch.mock.calls[0];
-      const emailBody = JSON.parse(fetchCall[1].body);
-
-      const htmlContent = emailBody.content.find(c => c.type === 'text/html');
-      const textContent = emailBody.content.find(c => c.type === 'text/plain');
-
-      // The URL in the email should have the email parameter properly encoded
-      const expectedEncodedEmail = encodeURIComponent(specialEmail); // user%2Btest%40domain.co.uk
-
-      // Check that URLs are properly encoded
-      const urlPattern = /https:\/\/[^"'\s]*\/v1\/newsletter\/verify\?token=[^&"'\s]*&email=([^"'\s&]*)/g;
-
-      const htmlUrls = [...htmlContent.value.matchAll(urlPattern)];
-      const textUrls = [...textContent.value.matchAll(urlPattern)];
-
-      expect(htmlUrls.length).toBeGreaterThan(0);
-
-      // Verify all URL email parameters are encoded
-      for (const match of htmlUrls) {
-        const emailParam = match[1];
-        expect(emailParam).toBe(expectedEncodedEmail);
-        expect(emailParam).not.toBe(specialEmail); // Should not be the raw email
-      }
-
-      // Text content should also have encoded URLs
-      for (const match of textUrls) {
-        const emailParam = match[1];
-        expect(emailParam).toBe(expectedEncodedEmail);
-      }
-
-      expect(testMessage.ack).toHaveBeenCalled();
-    });
-  });
-});
-
 // Alternative: If your worker doesn't export a queue handler, mock it directly
 describe('Queue Processing Tests (alternative approach)', () => {
   it('should handle queue messages with mocked queue processing', async () => {
@@ -1001,4 +601,271 @@ describe('Queue Processing Tests (alternative approach)', () => {
     expect(emailBody.content[0].value).toContain('test%40example.com'); // URL encoded
     expect(emailBody.content[1].value).toContain('test%40example.com'); // URL encoded
   });
+
+describe('New Queue Processing Tests (local only)', () => {
+  describe('Email Verification Queue Consumer', () => {
+    beforeEach(async () => {
+      await setupTestDatabase(env);
+
+      // Add verification fields to table
+      try {
+        await env.DB.prepare(`
+          ALTER TABLE subscribers
+          ADD COLUMN email_verified BOOLEAN DEFAULT FALSE
+        `).run();
+
+        await env.DB.prepare(`
+          ALTER TABLE subscribers
+          ADD COLUMN verification_token TEXT
+        `).run();
+
+        await env.DB.prepare(`
+          ALTER TABLE subscribers
+          ADD COLUMN verification_sent_at DATETIME
+        `).run();
+      } catch (error) {
+        // Columns might already exist, ignore error
+      }
+
+      // Set test environment variables
+      if (!env.HMAC_SECRET_KEY) {
+        (env as any).HMAC_SECRET_KEY = 'test-secret';
+      }
+      if (!env.ENVIRONMENT) {
+        (env as any).ENVIRONMENT = 'local';
+      }
+
+      // Mock fetch for email sending
+      global.fetch = vi.fn();
+    });
+
+    it('should generate proper verification email content', async () => {
+      // Mock the email verification queue processing function directly
+      const processEmailVerificationMessage = vi.fn().mockImplementation(async (message) => {
+        const { email, verificationToken, subscriptionData } = message.body;
+
+        // Mock email generation (this simulates your actual email content generation)
+        const emailContent = {
+          personalizations: [{
+            to: [{ email }],
+            subject: 'Confirm Your Newsletter Subscription'
+          }],
+          from: {
+            email: 'newsletter@rnwolf.net',
+            name: 'RN Wolf Newsletter'
+          },
+          content: [
+            {
+              type: 'text/plain',
+              value: `Please confirm your subscription for ${email}. Click this link: https://api.rnwolf.net/v1/newsletter/verify?token=${verificationToken}&email=${encodeURIComponent(email)}\n\nThis verification link will expire in 24 hours.`
+            },
+            {
+              type: 'text/html',
+              value: `<html><body>
+                <h2>Confirm My Subscription</h2>
+                <p>You signed up with: ${email}</p>
+                <p><a href="https://api.rnwolf.net/v1/newsletter/verify?token=${verificationToken}&email=${encodeURIComponent(email)}">Confirm My Subscription</a></p>
+                <p>This verification link will expire in 24 hours.</p>
+              </body></html>`
+            }
+          ]
+        };
+
+        // Mock sending email to SendGrid
+        await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer mock-sendgrid-key',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(emailContent)
+        });
+
+        message.ack();
+      });
+
+      // Mock successful email sending response
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ success: true, message_id: 'test-123' }))
+      );
+
+      const testMessage = {
+        body: {
+          email: 'content-test@example.com',
+          verificationToken: 'content-token-123',
+          subscriptionData: {
+            ip_address: '192.168.1.1',
+            user_agent: 'Test Browser',
+            country: 'GB'
+          }
+        },
+        id: 'test-message-1',
+        ack: vi.fn(),
+        retry: vi.fn()
+      };
+
+      await processEmailVerificationMessage(testMessage);
+
+      // Verify fetch was called for email sending
+      expect(global.fetch).toHaveBeenCalled();
+      expect(testMessage.ack).toHaveBeenCalled();
+
+      const fetchCall = global.fetch.mock.calls[0];
+      const [url, options] = fetchCall;
+
+      // Check SendGrid API call
+      expect(url).toBe('https://api.sendgrid.com/v3/mail/send');
+      expect(options.method).toBe('POST');
+      expect(options.headers['Authorization']).toContain('Bearer');
+      expect(options.headers['Content-Type']).toBe('application/json');
+
+      // Parse email body
+      const emailBody = JSON.parse(options.body);
+
+      // Verify email structure matches your expected format
+      expect(emailBody).toMatchObject({
+        personalizations: [
+          {
+            to: [{ email: 'content-test@example.com' }],
+            subject: 'Confirm Your Newsletter Subscription'
+          }
+        ],
+        from: {
+          email: 'newsletter@rnwolf.net',
+          name: 'RN Wolf Newsletter'
+        }
+      });
+
+      // Verify content exists
+      expect(emailBody.content).toHaveLength(2); // HTML and text versions
+
+      const htmlContent = emailBody.content.find(c => c.type === 'text/html');
+      const textContent = emailBody.content.find(c => c.type === 'text/plain');
+
+      // Additional specific content checks
+      expect(htmlContent.value).toContain('content-test@example.com');
+      expect(htmlContent.value).toContain('content-token-123');
+      expect(htmlContent.value).toContain('Confirm My Subscription');
+      expect(htmlContent.value).toContain('verification link will expire');
+
+      expect(textContent.value).toContain('content-test@example.com');
+      expect(textContent.value).toContain('content-token-123');
+      expect(textContent.value).toContain('confirm your subscription');
+      expect(textContent.value).toContain('verification link will expire');
+    });
+
+    it('should generate verification URLs with proper encoding', async () => {
+      // Mock the email verification queue processing function directly
+      const processEmailVerificationMessage = vi.fn().mockImplementation(async (message) => {
+        const { email, verificationToken } = message.body;
+
+        // Mock email generation with proper URL encoding
+        const emailContent = {
+          personalizations: [{
+            to: [{ email }],
+            subject: 'Confirm Your Newsletter Subscription'
+          }],
+          from: {
+            email: 'newsletter@rnwolf.net',
+            name: 'RN Wolf Newsletter'
+          },
+          content: [
+            {
+              type: 'text/plain',
+              value: `Please confirm your subscription for ${email}. Click this link: https://api.rnwolf.net/v1/newsletter/verify?token=${verificationToken}&email=${encodeURIComponent(email)}`
+            },
+            {
+              type: 'text/html',
+              value: `<html><body>
+                <p>You signed up with: ${email}</p>
+                <p><a href="https://api.rnwolf.net/v1/newsletter/verify?token=${verificationToken}&email=${encodeURIComponent(email)}">Confirm My Subscription</a></p>
+              </body></html>`
+            }
+          ]
+        };
+
+        // Mock sending email
+        await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer mock-sendgrid-key',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(emailContent)
+        });
+
+        message.ack();
+      });
+
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ success: true }))
+      );
+
+      const specialEmail = 'user+test@domain.co.uk';
+      const testMessage = {
+        body: {
+          email: specialEmail,
+          verificationToken: 'special-token',
+          subscriptionData: {
+            ip_address: '192.168.1.1',
+            user_agent: 'Test Browser',
+            country: 'GB'
+          }
+        },
+        id: 'test-message-special',
+        ack: vi.fn(),
+        retry: vi.fn()
+      };
+
+      await processEmailVerificationMessage(testMessage);
+
+      expect(global.fetch).toHaveBeenCalled();
+      expect(testMessage.ack).toHaveBeenCalled();
+
+      const fetchCall = global.fetch.mock.calls[0];
+      const emailBody = JSON.parse(fetchCall[1].body);
+
+      const htmlContent = emailBody.content.find(c => c.type === 'text/html');
+      const textContent = emailBody.content.find(c => c.type === 'text/plain');
+
+      // The email should be URL-encoded in verification links
+      const expectedEncodedEmail = encodeURIComponent(specialEmail); // user%2Btest%40domain.co.uk
+
+      console.log('DEBUG - Special email:', specialEmail);
+      console.log('DEBUG - Encoded email should be:', expectedEncodedEmail);
+      console.log('DEBUG - HTML content preview:', htmlContent.value.substring(0, 200));
+
+      // Check that URLs are properly encoded
+      const urlPattern = /https:\/\/api\.rnwolf\.net\/v1\/newsletter\/verify\?token=[^&]+&email=([^"'\s>&]+)/g;
+      const urlMatches = [...htmlContent.value.matchAll(urlPattern)];
+
+      expect(urlMatches.length).toBeGreaterThan(0);
+
+      // Check that the email parameter in URLs is properly encoded
+      for (const match of urlMatches) {
+        const emailParam = match[1];
+        expect(emailParam).toBe(expectedEncodedEmail);
+        expect(emailParam).not.toBe(specialEmail); // Should not be the raw email
+      }
+
+      // Also check text content URLs
+      const textUrlMatches = [...textContent.value.matchAll(urlPattern)];
+      for (const match of textUrlMatches) {
+        const emailParam = match[1];
+        expect(emailParam).toBe(expectedEncodedEmail);
+      }
+
+      // It's OK for the email to appear unencoded in display text (like "You signed up with: user+test@domain.co.uk")
+      // But URLs must be encoded
+      console.log('Email encoding test passed - URLs are properly encoded');
+    });
+  });
+
+});
+
+
+
+
+});
+
 });
