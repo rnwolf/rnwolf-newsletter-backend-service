@@ -8,6 +8,7 @@
     "test": "tests"
   },
   "scripts": {
+
     "dev": "wrangler dev --env local",
     "dev:staging": "wrangler dev --env staging",
     "dev:remote": "wrangler dev --env local --remote",

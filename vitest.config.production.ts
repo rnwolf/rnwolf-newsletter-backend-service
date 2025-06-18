@@ -4,6 +4,9 @@ import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
 export default defineWorkersConfig({
   test: {
     setupFiles: ['./tests/setup-smoke.ts'], // Different setup for production smoke tests
+    exclude: [
+      '**/node_modules/**', // Exclude all files in node_modules
+    ],
     poolOptions: {
       workers: {
         wrangler: {
@@ -15,7 +18,8 @@ export default defineWorkersConfig({
           compatibilityFlags: ['nodejs_compat'],
           // Vars are for non-secret configuration
           vars: {
-            ENVIRONMENT: 'production'
+            ENVIRONMENT: 'production',
+            CORS_ORIGIN: 'https://www.rnwolf.net' // From wrangler.jsonc production env
           },
           // Bindings are for secrets, KV, D1, etc.
           bindings: {

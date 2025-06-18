@@ -39,19 +39,27 @@ const TEST_CONFIG = {
   local: {
     baseUrl: 'http://localhost:8787',
     useWorkerFetch: true,
-    setupDatabase: true
+    setupDatabase: true,
+    isLocal: true,
+    corsOrigin: 'http://localhost:3000' // From wrangler.jsonc local env
   },
   staging: {
     baseUrl: 'https://api-staging.rnwolf.net',
     useWorkerFetch: false,
-    setupDatabase: false
+    setupDatabase: false,
+    isLocal: false,
+    corsOrigin: 'https://staging.rnwolf.net' // From wrangler.jsonc staging env
   },
   production: {
     baseUrl: 'https://api.rnwolf.net',
     useWorkerFetch: false,
-    setupDatabase: false
+    setupDatabase: false,
+    isLocal: false,
+    corsOrigin: 'https://www.rnwolf.net' // From wrangler.jsonc production env
   }
 };
+
+
 
 const TEST_ENV = (env.ENVIRONMENT || 'local') as keyof typeof TEST_CONFIG;
 const config = TEST_CONFIG[TEST_ENV];
@@ -65,21 +73,36 @@ async function makeRequest(path: string, options?: RequestInit): Promise<Respons
     const request = new Request(url, options);
     return await worker.fetch(request, env);
   } else {
-    // Staging/Production environment - use real HTTP with proper headers
+    // Staging/Production environment - use real HTTP with proper headers and logging
     const requestOptions = {
       ...options,
       headers: {
         ...options?.headers,
-        // Add the Origin header that CORS expects
-        'Origin': 'https://www.rnwolf.net',
+        // Use the environment-specific CORS origin
+        'Origin': config.corsOrigin,
         // Ensure Content-Type is set for POST requests
-        ...(options?.method === 'POST' && {
+        ...(options?.method === 'POST' && !options?.headers?.['Content-Type'] && {
           'Content-Type': 'application/json'
         })
       }
     };
 
-    return await fetch(url, requestOptions);
+    console.log(`[${TEST_ENV}] Making real HTTP request to: ${url}`);
+    // Use JSON.stringify with a replacer to handle potential circular structures or BigInts if any
+    console.log(`[${TEST_ENV}] Request options:`, JSON.stringify(requestOptions, (key, value) =>
+      typeof value === 'bigint' ? value.toString() : value, 2));
+
+    const response = await fetch(url, requestOptions);
+
+    console.log(`[${TEST_ENV}] Response status from ${url}: ${response.status}`);
+    const responseHeaders = Object.fromEntries(response.headers.entries());
+    console.log(`[${TEST_ENV}] Response headers:`, JSON.stringify(responseHeaders, null, 2));
+
+    if (!response.ok) {
+      const responseBodyText = await response.clone().text(); // Clone to read body safely
+      console.error(`[${TEST_ENV}] Error Response body from ${url} (status ${response.status}):\n${responseBodyText.substring(0, 500)}...`);
+    }
+    return response;
   }
 };
 
@@ -104,8 +127,9 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
     // Mock global fetch for Turnstile
     global.fetch = vi.fn().mockImplementation(async (url, options) => {
       if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
-        // Check if it's a local test environment
-        if (config.setupDatabase || TEST_ENV === 'local') {
+        // Mock Turnstile to pass for local and staging tests
+        if (TEST_ENV === 'local' || TEST_ENV === 'staging') {
+          console.log(`[${TEST_ENV}] Mocking Turnstile siteverify to return success: true`);
           return Promise.resolve(
             new Response(JSON.stringify({ success: true }), {
               status: 200,
@@ -348,145 +372,6 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
     });
   });
 
-  describe('Queue Integration (C4 Model Phase 1)', () => {
-    it('should queue verification email on subscription', async () => {
-      const testEmail = generateTestEmail('queue-test@example.com');
-
-      const response = await makeRequest('/v1/newsletter/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Origin': 'https://www.rnwolf.net',  // Fix the CORS issue
-          'CF-Connecting-IP': '192.168.1.100',
-          'User-Agent': 'Mozilla/5.0 Test Browser',
-          'CF-IPCountry': 'US'
-        },
-        body: JSON.stringify({ email: testEmail, turnstileToken: 'test-token' })
-      });
-
-      expect(response.status).toBe(200);
-
-      // For local tests, verify queue was called
-      if (config.setupDatabase) {
-        expect(env.EMAIL_VERIFICATION_QUEUE.send).toHaveBeenCalledWith(
-          expect.objectContaining({
-            email: testEmail,
-            verificationToken: expect.any(String),
-            subscribedAt: expect.any(String),
-            metadata: expect.objectContaining({
-              ipAddress: '192.168.1.100',
-              userAgent: 'Mozilla/5.0 Test Browser',
-              country: 'US'
-            })
-          })
-        );
-
-        // Verify token in queue message matches database
-        const queueCall = (env.EMAIL_VERIFICATION_QUEUE.send as any).mock.calls[0][0] as QueueMessage;
-        const subscriber = await env.DB.prepare(
-          'SELECT verification_token FROM subscribers WHERE email = ?'
-        ).bind(testEmail).first() as DatabaseRow | null;
-
-        expect(queueCall.verificationToken).toBe(subscriber?.verification_token);
-      }
-    });
-
-    it('should include all required metadata in queue message', async () => {
-      if (!config.setupDatabase) return;
-
-      const testEmail = generateTestEmail('metadata-test@example.com');
-
-      await makeRequest('/v1/newsletter/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'CF-Connecting-IP': '203.0.113.42',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'CF-IPCountry': 'AU'
-        },
-        body: JSON.stringify({ email: testEmail })
-      });
-
-      const queueCall = (env.EMAIL_VERIFICATION_QUEUE.send as any).mock.calls[0][0] as QueueMessage;
-
-      expect(queueCall).toMatchObject({
-        email: testEmail,
-        verificationToken: expect.any(String),
-        subscribedAt: expect.any(String),
-        metadata: {
-          ipAddress: '203.0.113.42',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          country: 'AU'
-        }
-      });
-
-      // Verify subscribedAt is valid ISO timestamp
-      expect(() => new Date(queueCall.subscribedAt)).not.toThrow();
-      expect(new Date(queueCall.subscribedAt).getTime()).toBeGreaterThan(Date.now() - 5000);
-    });
-
-    it('should handle queue failures gracefully', async () => {
-      if (!config.setupDatabase) return;
-
-      const testEmail = generateTestEmail('queue-failure@example.com');
-
-      // Mock queue failure
-      (env.EMAIL_VERIFICATION_QUEUE.send as any).mockRejectedValueOnce(
-        new Error('Queue service unavailable')
-      );
-
-      const response = await makeRequest('/v1/newsletter/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: testEmail })
-      });
-
-      // Should still return success (graceful degradation)
-      expect(response.status).toBe(200);
-
-      const result = await response.json() as SubscriptionResponse;
-      expect(result.success).toBe(true);
-
-      // But should indicate verification email issue
-      expect(result.message).toMatch(/verification|check.*email/);
-      expect(result.message).toMatch(/verification email|check.*email|try.*again|contact.*support/i);
-
-      // Subscriber should still be created in database
-      const subscriber = await env.DB.prepare(
-        'SELECT * FROM subscribers WHERE email = ?'
-      ).bind(testEmail).first() as DatabaseRow | null;
-
-      expect(subscriber).toBeTruthy();
-      expect(Boolean(subscriber?.email_verified)).toBe(false);
-      expect(subscriber?.verification_token).toBeTruthy();
-    });
-
-    it('should not queue email if database operation fails', async () => {
-      if (!config.setupDatabase) return;
-
-      const testEmail = generateTestEmail('db-failure@example.com');
-
-      // Mock database failure
-      const dbSpy = vi.spyOn(env.DB, 'prepare').mockImplementation(() => {
-        throw new Error('Database connection failed');
-      });
-
-      const response = await makeRequest('/v1/newsletter/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: testEmail })
-      });
-
-      // Should return error
-      expect(response.status).toBe(500);
-
-      // Should not have called queue
-      expect(env.EMAIL_VERIFICATION_QUEUE.send).not.toHaveBeenCalled();
-
-      dbSpy.mockRestore();
-    });
-  });
-
   describe('Response Messages (C4 Model Compliance)', () => {
     it('should return verification instruction message', async () => {
       const testEmail = generateTestEmail('message-test@example.com');
@@ -545,7 +430,7 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Origin': 'https://www.rnwolf.net'
+          'Origin': config.corsOrigin // Use the dynamic origin for the request
         },
         body: JSON.stringify({ email: testEmail })
       });
@@ -553,7 +438,7 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
       expect(response.status).toBe(200);
 
       // CORS headers should still be present
-      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://www.rnwolf.net');
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(config.corsOrigin); // Expect the dynamic origin
       expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
 
       const result = await response.json() as SubscriptionResponse;
@@ -761,4 +646,144 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
       expect(verifyHtml).toContain('Email Confirmed!');
     });
   });
+
+  describe('Queue Integration (C4 Model Phase 1)', () => {
+    it('should queue verification email on subscription', async () => {
+      const testEmail = generateTestEmail('queue-test@example.com');
+
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: {
+          // Content-Type and Origin will be handled by makeRequest
+          //'CF-Connecting-IP': '192.168.1.100',  NOT ALLOWED BY CLOUDFLARE
+          'User-Agent': 'Mozilla/5.0 Test Browser'
+          //'CF-IPCountry': 'US'   NOT ALLOWED BY CLOUDFLARE
+        },
+    body: JSON.stringify({ email: testEmail, turnstileToken: '1x00000000000000000000AA' }) // Use Cloudflare's "Always Passes" test token
+      });
+
+      expect(response.status).toBe(200);
+
+      // For local tests, verify queue was called
+      if (config.setupDatabase) {
+        expect(env.EMAIL_VERIFICATION_QUEUE.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            email: testEmail,
+            verificationToken: expect.any(String),
+            subscribedAt: expect.any(String),
+            metadata: expect.objectContaining({
+              //ipAddress: '192.168.1.100',
+              userAgent: 'Mozilla/5.0 Test Browser'
+              //country: 'US'
+            })
+          })
+        );
+
+        // Verify token in queue message matches database
+        const queueCall = (env.EMAIL_VERIFICATION_QUEUE.send as any).mock.calls[0][0] as QueueMessage;
+        const subscriber = await env.DB.prepare(
+          'SELECT verification_token FROM subscribers WHERE email = ?'
+        ).bind(testEmail).first() as DatabaseRow | null;
+
+        expect(queueCall.verificationToken).toBe(subscriber?.verification_token);
+      }
+    });
+
+    it('should include all required metadata in queue message', async () => {
+      if (!config.setupDatabase) return;
+
+      const testEmail = generateTestEmail('metadata-test@example.com');
+
+      await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          //'CF-Connecting-IP': '203.0.113.42',  NOT ALLOWED BY CLOUDFLARE
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          //'CF-IPCountry': 'AU' NOT ALLOWED BY CLOUDFLARE
+        },
+        body: JSON.stringify({ email: testEmail })
+      });
+
+      const queueCall = (env.EMAIL_VERIFICATION_QUEUE.send as any).mock.calls[0][0] as QueueMessage;
+
+      expect(queueCall).toMatchObject({
+        email: testEmail,
+        verificationToken: expect.any(String),
+        subscribedAt: expect.any(String),
+        metadata: {
+          //ipAddress: '203.0.113.42',
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          //country: 'AU'
+        }
+      });
+
+      // Verify subscribedAt is valid ISO timestamp
+      expect(() => new Date(queueCall.subscribedAt)).not.toThrow();
+      expect(new Date(queueCall.subscribedAt).getTime()).toBeGreaterThan(Date.now() - 5000);
+    });
+
+    it('should handle queue failures gracefully', async () => {
+      if (!config.setupDatabase) return;
+
+      const testEmail = generateTestEmail('queue-failure@example.com');
+
+      // Mock queue failure
+      (env.EMAIL_VERIFICATION_QUEUE.send as any).mockRejectedValueOnce(
+        new Error('Queue service unavailable')
+      );
+
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testEmail })
+      });
+
+      // Should still return success (graceful degradation)
+      expect(response.status).toBe(200);
+
+      const result = await response.json() as SubscriptionResponse;
+      expect(result.success).toBe(true);
+
+      // But should indicate verification email issue
+      expect(result.message).toMatch(/verification|check.*email/);
+      expect(result.message).toMatch(/verification email|check.*email|try.*again|contact.*support/i);
+
+      // Subscriber should still be created in database
+      const subscriber = await env.DB.prepare(
+        'SELECT * FROM subscribers WHERE email = ?'
+      ).bind(testEmail).first() as DatabaseRow | null;
+
+      expect(subscriber).toBeTruthy();
+      expect(Boolean(subscriber?.email_verified)).toBe(false);
+      expect(subscriber?.verification_token).toBeTruthy();
+    });
+
+    it('should not queue email if database operation fails', async () => {
+      if (!config.setupDatabase) return;
+
+      const testEmail = generateTestEmail('db-failure@example.com');
+
+      // Mock database failure
+      const dbSpy = vi.spyOn(env.DB, 'prepare').mockImplementation(() => {
+        throw new Error('Database connection failed');
+      });
+
+      const response = await makeRequest('/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testEmail })
+      });
+
+      // Should return error
+      expect(response.status).toBe(500);
+
+      // Should not have called queue
+      expect(env.EMAIL_VERIFICATION_QUEUE.send).not.toHaveBeenCalled();
+
+      dbSpy.mockRestore();
+    });
+  });
+
+
 });

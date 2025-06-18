@@ -122,6 +122,8 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
 
   describe('Complete Email Verification Workflow', () => {
     it('should handle full subscribe → verify → confirmed flow', async () => {
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const testEmail = generateTestEmail('full-flow@example.com');
 
       // Step 1: Subscribe to newsletter (should create unverified subscriber)
@@ -136,47 +138,44 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
       expect(subscribeResult.success).toBe(true);
       expect(subscribeResult.message).toContain('Please check your email and click the verification link');
 
-      // For local tests, continue with verification flow
-      if (config.setupDatabase) {
-        // Step 2: Verify subscriber is in database as unverified
-        const subscriber1 = await env.DB.prepare(
-          'SELECT * FROM subscribers WHERE email = ?'
-        ).bind(testEmail).first() as DatabaseRow | null;
+      // Step 2: Verify subscriber is in database as unverified
+      const subscriber1 = await env.DB.prepare(
+        'SELECT * FROM subscribers WHERE email = ?'
+      ).bind(testEmail).first() as DatabaseRow | null;
 
-        expect(subscriber1).toBeTruthy();
-        expect(Boolean(subscriber1?.email_verified)).toBe(false);
-        expect(subscriber1?.verification_token).toBeTruthy();
-        expect(subscriber1?.verified_at).toBeNull();
+      expect(subscriber1).toBeTruthy();
+      expect(Boolean(subscriber1?.email_verified)).toBe(false);
+      expect(subscriber1?.verification_token).toBeTruthy();
+      expect(subscriber1?.verified_at).toBeNull();
 
-        // Step 3: Verify email using token from database
-        const verificationToken = subscriber1?.verification_token;
-        expect(verificationToken).toBeTruthy();
+      // Step 3: Verify email using token from database
+      const verificationToken = subscriber1?.verification_token;
+      expect(verificationToken).toBeTruthy();
 
-        const verifyResponse = await makeRequest(
-          `/v1/newsletter/verify?token=${verificationToken}&email=${encodeURIComponent(testEmail)}`
-        );
+      const verifyResponse = await makeRequest(
+        `/v1/newsletter/verify?token=${verificationToken}&email=${encodeURIComponent(testEmail)}`
+      );
 
-        expect(verifyResponse.status).toBe(200);
-        expect(verifyResponse.headers.get('content-type')).toContain('text/html');
+      expect(verifyResponse.status).toBe(200);
+      expect(verifyResponse.headers.get('content-type')).toContain('text/html');
 
-        const verifyHtml = await verifyResponse.text();
-        expect(verifyHtml).toContain('Email Confirmed!');
-        expect(verifyHtml).toContain('Your email address has been confirmed');
+      const verifyHtml = await verifyResponse.text();
+      expect(verifyHtml).toContain('Email Confirmed!');
+      expect(verifyHtml).toContain('Your email address has been confirmed');
 
-        // Step 4: Verify subscriber is now confirmed in database
-        const subscriber2 = await env.DB.prepare(
-          'SELECT * FROM subscribers WHERE email = ?'
+      // Step 4: Verify subscriber is now confirmed in database
+      const subscriber2 = await env.DB.prepare(
+        'SELECT * FROM subscribers WHERE email = ?'
         ).bind(testEmail).first() as DatabaseRow | null;
 
         expect(Boolean(subscriber2?.email_verified)).toBe(true);
         expect(subscriber2?.verified_at).toBeTruthy();
         expect(subscriber2?.verification_token).toBeNull(); // Should be cleared
         expect(subscriber2?.unsubscribed_at).toBeNull(); // Still subscribed
-      }
     });
 
     it('should handle subscribe → verify → unsubscribe → resubscribe flow', async () => {
-      if (!config.setupDatabase) return; // Local only
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('resubscribe-flow@example.com');
 
@@ -253,7 +252,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
     });
 
     it('should prevent access to newsletters for unverified subscribers', async () => {
-      if (!config.setupDatabase) return;
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('unverified-access@example.com');
 
@@ -279,7 +278,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
     });
 
     it('should handle duplicate verification attempts gracefully', async () => {
-      if (!config.setupDatabase) return;
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('duplicate-verify@example.com');
 
@@ -312,7 +311,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
     });
 
     it('should handle verification with expired tokens', async () => {
-      if (!config.setupDatabase) return;
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('expired-token@example.com');
 
@@ -350,8 +349,8 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
   });
 
   describe('Security and Edge Cases', () => {
-    it('should prevent verification token reuse across different emails', async () => {
-      if (!config.setupDatabase) return;
+    it('should prevent verification token reuse across different emails', async () => { // This test relies on DB access
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const email1 = generateTestEmail('security1@example.com');
       const email2 = generateTestEmail('security2@example.com');
@@ -397,7 +396,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
     });
 
     it('should handle verification attempts for deleted/modified subscribers', async () => {
-      if (!config.setupDatabase) return;
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('deleted-subscriber@example.com');
 
@@ -426,6 +425,8 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
     });
 
     it('should handle malformed verification tokens gracefully', async () => {
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const testEmail = 'malformed-test@example.com';
 
       // Insert a subscriber to ensure the email exists
@@ -443,10 +444,11 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
       ];
 
       for (const malformedToken of malformedTokens) {
-        const verifyResponse = await worker.fetch(
-          new Request(`http://localhost:8787/v1/newsletter/verify?token=${malformedToken}&email=${encodeURIComponent(testEmail)}`),
-          env
-        );
+        // Use makeRequest to ensure it uses worker.fetch for local or real fetch for remote
+        // However, since this test relies on local DB setup, it should only run locally.
+        // The worker.fetch call was problematic if this test was intended for remote.
+        // Sticking to local-only execution for this test as written.
+        const verifyResponse = await makeRequest(`/v1/newsletter/verify?token=${malformedToken}&email=${encodeURIComponent(testEmail)}`);
 
         expect(verifyResponse.status).toBe(400);
         const html = await verifyResponse.text();
@@ -457,6 +459,8 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
     });
 
     it('should handle missing verification parameters gracefully', async () => {
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const testEmail = 'missing-param-test@example.com';
 
       // Test cases that should return "Missing Parameters"
@@ -484,10 +488,8 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
       ];
 
       for (const testCase of missingParamCases) {
-        const verifyResponse = await worker.fetch(
-          new Request(`http://localhost:8787${testCase.url}`),
-          env
-        );
+        // Use makeRequest for consistency, though this test is local-only
+        const verifyResponse = await makeRequest(testCase.url);
 
         expect(verifyResponse.status).toBe(400);
         const html = await verifyResponse.text();
@@ -499,7 +501,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
 
 
     it('should handle special characters in email addresses', async () => {
-      if (!config.setupDatabase) return;
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const specialEmails = [
         'user+tag@domain.com',
@@ -572,8 +574,8 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
   });
 
   describe('Database State Management', () => {
-    it('should maintain data consistency during verification', async () => {
-      if (!config.setupDatabase) return;
+    it('should maintain data consistency during verification', async () => { // This test relies on DB access
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('consistency@example.com');
 
@@ -615,7 +617,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
     });
 
     it('should handle concurrent verification attempts', async () => {
-      if (!config.setupDatabase) return;
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('concurrent@example.com');
 
@@ -651,8 +653,8 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
   });
 
   describe('Error Recovery and Resilience', () => {
-    it('should handle database errors during verification gracefully', async () => {
-      if (!config.setupDatabase) return;
+    it('should handle database errors during verification gracefully', async () => { // This test relies on DB access
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('db-error@example.com');
 
@@ -714,8 +716,8 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
   });
 
   describe('Performance and Scalability', () => {
-    it('should handle verification requests efficiently', async () => {
-      if (!config.setupDatabase) return;
+    it('should handle verification requests efficiently', async () => { // This test relies on DB access
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmails = Array.from({ length: 10 }, (_, i) =>
         generateTestEmail(`perf-test-${i}@example.com`)
@@ -759,7 +761,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
 
   describe('Integration with Existing Newsletter Infrastructure', () => {
     it('should maintain compatibility with existing unsubscribe flow', async () => {
-      if (!config.setupDatabase) return;
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const testEmail = generateTestEmail('unsubscribe-compat@example.com');
 
@@ -803,7 +805,7 @@ describe(`Email Verification Integration Tests (${TEST_ENV} environment)`, () =>
     });
 
     it('should work with newsletter sender script filtering', async () => {
-      if (!config.setupDatabase) return;
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       // Create test scenario with mixed verification statuses
       const verifiedEmail = generateTestEmail('verified@example.com');

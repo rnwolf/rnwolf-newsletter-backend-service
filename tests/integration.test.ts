@@ -31,17 +31,23 @@ const TEST_CONFIG = {
   local: {
     baseUrl: 'http://localhost:8787',
     useWorkerFetch: true,
-    setupDatabase: true
+    setupDatabase: true,
+    isLocal: true,
+    corsOrigin: 'http://localhost:3000' // From wrangler.jsonc local env
   },
   staging: {
     baseUrl: 'https://api-staging.rnwolf.net',
     useWorkerFetch: false,
-    setupDatabase: false
+    setupDatabase: false,
+    isLocal: false,
+    corsOrigin: 'https://staging.rnwolf.net' // From wrangler.jsonc staging env
   },
   production: {
     baseUrl: 'https://api.rnwolf.net',
     useWorkerFetch: false,
-    setupDatabase: false
+    setupDatabase: false,
+    isLocal: false,
+    corsOrigin: 'https://www.rnwolf.net' // From wrangler.jsonc production env
   }
 };
 
@@ -312,11 +318,11 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
       // Test subscription CORS (restricted)
       const subscriptionOptions = await makeRequest('/v1/newsletter/subscribe', {
         method: 'OPTIONS',
-        headers: { 'Origin': 'https://www.rnwolf.net' }
+        headers: { 'Origin': config.corsOrigin } // Use the dynamic origin for the current environment
       });
 
       expect(subscriptionOptions.status).toBe(200);
-      expect(subscriptionOptions.headers.get('Access-Control-Allow-Origin')).toBe('https://www.rnwolf.net');
+      expect(subscriptionOptions.headers.get('Access-Control-Allow-Origin')).toBe(config.corsOrigin); // Expect the dynamic origin
 
       // Test unsubscribe CORS (open)
       const unsubscribeOptions = await makeRequest('/v1/newsletter/unsubscribe', {

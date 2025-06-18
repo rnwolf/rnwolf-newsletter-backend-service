@@ -11,6 +11,7 @@ interface Env {
   HMAC_SECRET_KEY: string;
   ENVIRONMENT: string;
   GRAFANA_API_KEY: string;
+  CORS_ORIGIN: string;
   EMAIL_VERIFICATION_QUEUE: Queue;
 }
 
@@ -25,15 +26,6 @@ interface SubscriptionData {
     city: string;
   };
 }
-
-// CORS configuration
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': 'https://www.rnwolf.net',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Max-Age': '86400',
-  'Content-Type': 'application/json'
-};
 
 // Helper function to generate a verification token
 function generateVerificationToken(email: string, secretKey: string): string {
@@ -66,20 +58,6 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email) && email.length <= 254;
 }
 
-
-// Helper function to add CORS headers to any response
-function addCORSHeaders(response: Response): Response {
-  const newResponse = new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: {
-      ...Object.fromEntries(response.headers.entries()),
-      ...CORS_HEADERS
-    }
-  });
-  return newResponse;
-}
-
 // Helper function to create a response with CORS headers
 function createCORSResponse(
   body: any,
@@ -90,14 +68,20 @@ function createCORSResponse(
 ): Response {
   // Use permissive CORS for email-related endpoints
   const isEmailEndpoint = endpoint === '/v1/newsletter/verify' || endpoint === '/v1/newsletter/unsubscribe';
+  const allowedOrigin = isEmailEndpoint ? '*' : (env?.CORS_ORIGIN || 'https://www.rnwolf.net'); // Default to production if not set, but should be set by env
 
-  const baseHeaders = isEmailEndpoint ? {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+  const baseHeaders: HeadersInit = {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': isEmailEndpoint ? 'GET, OPTIONS' : 'POST, GET, OPTIONS', // Added GET for health checks etc.
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Added Authorization for metrics
     'Access-Control-Max-Age': '86400',
-    'Content-Type': 'application/json'
-  } : CORS_HEADERS;
+    'Content-Type': 'application/json',
+  };
+
+  // If the request is for the root/health endpoint and not an email endpoint, allow GET
+  if (!isEmailEndpoint && (endpoint === '/' || endpoint === '/health')) {
+    baseHeaders['Access-Control-Allow-Methods'] = 'GET, OPTIONS';
+  }
 
   let responseBody = { ...body };
 
@@ -439,25 +423,29 @@ export default {
       // Handle CORS preflight requests
       if (request.method === 'OPTIONS') {
         const url = new URL(request.url);
+        const isEmailEndpoint = url.pathname === '/v1/newsletter/unsubscribe' || url.pathname === '/v1/newsletter/verify';
 
-        // Email verification and unsubscribe endpoints allow any origin (for email client compatibility)
-        if (url.pathname === '/v1/newsletter/unsubscribe' || url.pathname === '/v1/newsletter/verify') {
-          return new Response(null, {
-            status: 200,
-            headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'GET, OPTIONS',
-              'Access-Control-Allow-Headers': 'Content-Type',
-              'Access-Control-Max-Age': '86400',
-              'Content-Type': 'application/json'
-            }
-          });
+        // Log the received CORS_ORIGIN from env for debugging
+        console.log(`[${requestId}] OPTIONS Handler: env.CORS_ORIGIN = "${env.CORS_ORIGIN}", env.ENVIRONMENT = "${env.ENVIRONMENT}"`);
+
+        const allowedOrigin = isEmailEndpoint ? '*' : (env.CORS_ORIGIN || 'https://www.rnwolf.net'); // Use env.CORS_ORIGIN, fallback for safety
+        console.log(`[${requestId}] OPTIONS Handler: determined allowedOrigin = "${allowedOrigin}" for endpoint ${url.pathname}`);
+        let allowedMethods = 'POST, GET, OPTIONS'; // Default allowed methods
+
+        if (isEmailEndpoint) {
+          allowedMethods = 'GET, OPTIONS';
+        } else if (url.pathname === '/' || url.pathname === '/health') {
+          allowedMethods = 'GET, OPTIONS';
         }
 
-        // All other endpoints use restricted CORS
         return new Response(null, {
           status: 200,
-          headers: CORS_HEADERS
+          headers: {
+            'Access-Control-Allow-Origin': allowedOrigin,
+            'Access-Control-Allow-Methods': allowedMethods,
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Reflect what actual requests might send
+            'Access-Control-Max-Age': '86400',
+          }
         });
       }
 

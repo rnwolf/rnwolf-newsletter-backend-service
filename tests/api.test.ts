@@ -31,26 +31,29 @@ const TEST_CONFIG = {
     baseUrl: 'http://localhost:8787',
     useWorkerFetch: true,
     setupDatabase: true,
-    isLocal: true
+    isLocal: true,
+    corsOrigin: 'http://localhost:3000' // From wrangler.jsonc local env
   },
   staging: {
     baseUrl: 'https://api-staging.rnwolf.net',
     useWorkerFetch: false,
     setupDatabase: false,
-    isLocal: false
+    isLocal: false,
+    corsOrigin: 'https://staging.rnwolf.net' // From wrangler.jsonc staging env
   },
   production: {
     baseUrl: 'https://api.rnwolf.net',
     useWorkerFetch: false,
     setupDatabase: false,
-    isLocal: false
+    isLocal: false,
+    corsOrigin: 'https://www.rnwolf.net' // From wrangler.jsonc production env
   }
 };
 
 // Get environment from ENV variable, default to local
 const TEST_ENV = (env.ENVIRONMENT || 'local') as keyof typeof TEST_CONFIG;
 const config = TEST_CONFIG[TEST_ENV];
-const ALLOWED_ORIGIN = 'https://www.rnwolf.net';
+const ALLOWED_ORIGIN = config.corsOrigin;
 
 // Helper function to make requests (either via worker.fetch or real HTTP)
 async function makeRequest(path: string, options?: RequestInit): Promise<Response> {
@@ -158,7 +161,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
 
       // Verify CORS headers in health check
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
-      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('GET');
     });
 
     it('should include CORS headers in 404 responses', async () => {

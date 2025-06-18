@@ -4,6 +4,10 @@ import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
 export default defineWorkersConfig({
   test: {
     setupFiles: ['./tests/setup.ts'],
+    exclude: [
+      '**/node_modules/**', // Exclude all files in node_modules
+      '**/smoke-remote.test.ts', // Exclude remote smoke tests from local runs
+    ],
     poolOptions: {
       workers: {
         wrangler: { configPath: './wrangler.jsonc' },
@@ -23,6 +27,7 @@ export default defineWorkersConfig({
             }
           ],
           bindings: {
+            CORS_ORIGIN: 'http://localhost:3000', // From wrangler.jsonc local env
             EMAIL_VERIFICATION_QUEUE_CONSUMER: {
               type: 'queue',
               queueName: 'email-verification-queue'
