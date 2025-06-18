@@ -98,6 +98,26 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
   beforeEach(async () => {
     vi.clearAllMocks();
 
+    // Store original fetch
+    const originalFetch = global.fetch;
+
+    // Mock global fetch for Turnstile
+    global.fetch = vi.fn().mockImplementation(async (url, options) => {
+      if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+        // Check if it's a local test environment
+        if (config.setupDatabase || TEST_ENV === 'local') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ success: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          );
+        }
+      }
+      // For other URLs, call the original fetch or a more specific mock if defined later
+      return originalFetch(url, options);
+    });
+
     // Mock for consistent token generation
     vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
       for (let i = 0; i < array.length; i++) {
@@ -143,6 +163,8 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
         (env as any).EMAIL_VERIFICATION_QUEUE = {
           send: vi.fn().mockResolvedValue({}),
         };
+        // Set Turnstile secret key for local tests
+        (env as any).TURNSTILE_SECRET_KEY = 'test-turnstile-secret-key';
       }
     }
   });
@@ -569,16 +591,6 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
 
     it('should handle subscription with Turnstile token', async () => {
       const testEmail = generateTestEmail('with-turnstile@example.com');
-
-      // Mock successful Turnstile verification for local tests
-      if (config.setupDatabase) {
-        global.fetch = vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ success: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          })
-        );
-      }
 
       const response = await makeRequest('/v1/newsletter/subscribe', {
         method: 'POST',
