@@ -592,16 +592,6 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
     it('should handle subscription with Turnstile token', async () => {
       const testEmail = generateTestEmail('with-turnstile@example.com');
 
-      // Mock successful Turnstile verification for local tests
-      // if (config.setupDatabase) {
-      //   global.fetch = vi.fn().mockResolvedValue(
-      //     new Response(JSON.stringify({ success: true }), {
-      //       status: 200,
-      //       headers: { 'Content-Type': 'application/json' }
-      //     })
-      //   );
-      // }
-
       const response = await makeRequest('/v1/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
