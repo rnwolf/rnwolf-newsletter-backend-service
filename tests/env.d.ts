@@ -4,6 +4,7 @@ interface CloudflareEnv {
   HMAC_SECRET_KEY: string;
   ENVIRONMENT: string;
   GRAFANA_API_KEY: string;
+  EMAIL_VERIFICATION_QUEUE?: Queue<any>;
 }
 
 declare module 'cloudflare:test' {

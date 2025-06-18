@@ -60,13 +60,29 @@ const config = TEST_CONFIG[TEST_ENV];
 async function makeRequest(path: string, options?: RequestInit): Promise<Response> {
   const url = `${config.baseUrl}${path}`;
 
-   if (config.useWorkerFetch) {
+  if (config.useWorkerFetch) {
+    // Local environment - use worker.fetch()
     const request = new Request(url, options);
     return await worker.fetch(request, env);
   } else {
-    return await fetch(url, options);
+    // Staging/Production environment - use real HTTP with proper headers
+    const requestOptions = {
+      ...options,
+      headers: {
+        ...options?.headers,
+        // Add the Origin header that CORS expects
+        'Origin': 'https://www.rnwolf.net',
+        // Ensure Content-Type is set for POST requests
+        ...(options?.method === 'POST' && {
+          'Content-Type': 'application/json'
+        })
+      }
+    };
+
+    return await fetch(url, requestOptions);
   }
-}
+};
+
 
 // Helper function to generate unique test emails
 function generateTestEmail(base: string): string {
@@ -318,11 +334,12 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Origin': 'https://www.rnwolf.net',  // Fix the CORS issue
           'CF-Connecting-IP': '192.168.1.100',
           'User-Agent': 'Mozilla/5.0 Test Browser',
           'CF-IPCountry': 'US'
         },
-        body: JSON.stringify({ email: testEmail })
+        body: JSON.stringify({ email: testEmail, turnstileToken: 'test-token' })
       });
 
       expect(response.status).toBe(200);
