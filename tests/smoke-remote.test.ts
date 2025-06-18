@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { env } from 'cloudflare:test';
 
 interface SubscriptionResponse {
   success: boolean;
@@ -20,7 +21,7 @@ const PRODUCTION_API_URL = 'https://api.rnwolf.net';
 const STAGING_API_URL = 'https://api-staging.rnwolf.net';
 
 // Get environment from TEST_ENV, default to production for this file
-const TEST_ENV = process.env.TEST_ENV || 'production';
+const TEST_ENV = env.ENVIRONMENT || 'production';
 const API_URL = TEST_ENV === 'staging' ? STAGING_API_URL : PRODUCTION_API_URL;
 
 // Validate environment

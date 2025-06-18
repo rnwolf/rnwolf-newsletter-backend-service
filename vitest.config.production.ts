@@ -13,8 +13,14 @@ export default defineWorkersConfig({
         miniflare: {
           d1Databases: ['DB'],
           compatibilityFlags: ['nodejs_compat'],
+          // Vars are for non-secret configuration
           vars: {
             ENVIRONMENT: 'production'
+          },
+          // Bindings are for secrets, KV, D1, etc.
+          bindings: {
+            HMAC_SECRET_KEY: process.env.HMAC_SECRET_KEY,
+            TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY
           }
         },
       },

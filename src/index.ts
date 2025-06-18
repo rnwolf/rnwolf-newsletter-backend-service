@@ -81,11 +81,17 @@ function addCORSHeaders(response: Response): Response {
 }
 
 // Helper function to create a response with CORS headers
-function createCORSResponse(body: any, status: number = 200, endpoint?: string): Response {
+function createCORSResponse(
+  body: any,
+  status: number = 200,
+  endpoint?: string,
+  env?: Env,
+  errorForDebug?: any
+): Response {
   // Use permissive CORS for email-related endpoints
   const isEmailEndpoint = endpoint === '/v1/newsletter/verify' || endpoint === '/v1/newsletter/unsubscribe';
 
-  const headers = isEmailEndpoint ? {
+  const baseHeaders = isEmailEndpoint ? {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -93,9 +99,15 @@ function createCORSResponse(body: any, status: number = 200, endpoint?: string):
     'Content-Type': 'application/json'
   } : CORS_HEADERS;
 
-  return new Response(JSON.stringify(body), {
+  let responseBody = { ...body };
+
+  if (env && env.ENVIRONMENT === 'staging' && errorForDebug) {
+    responseBody.debug = errorForDebug instanceof Error ? errorForDebug.message : String(errorForDebug);
+  }
+
+  return new Response(JSON.stringify(responseBody), {
     status,
-    headers
+    headers: baseHeaders
   });
 }
 
@@ -282,7 +294,7 @@ async function processSubscription(
           success: false,
           message: 'Please complete the security verification.',
           troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
-        }, 400);
+        }, 400, undefined, env);
       }
     }
 
@@ -314,7 +326,7 @@ async function processSubscription(
     return createCORSResponse({
       success: true,
       message: message
-    });
+    }, 200, undefined, env);
 
   } catch (error) {
     console.error('Subscription processing error:', error);
@@ -323,13 +335,13 @@ async function processSubscription(
       return createCORSResponse({
         success: false,
         message: 'Our subscription service is temporarily unavailable. Please try again later.'
-      }, 500);
+      }, 500, undefined, env, error);
     }
 
     return createCORSResponse({
       success: false,
       message: 'An error occurred while processing your subscription. Please try again.'
-    }, 500);
+    }, 500, undefined, env, error);
   }
 }
 
@@ -346,7 +358,7 @@ async function handleSubscriptionRequest(
     return createCORSResponse({
       success: false,
       message: 'Method not allowed'
-    }, 405);
+    }, 405, undefined, env);
   }
 
   try {
@@ -365,7 +377,7 @@ async function handleSubscriptionRequest(
       return createCORSResponse({
         success: false,
         message: 'Email address is required'
-      }, 400);
+      }, 400, undefined, env);
     }
 
     // Add email validation
@@ -374,7 +386,7 @@ async function handleSubscriptionRequest(
       return createCORSResponse({
         success: false,
         message: 'Invalid email address'
-      }, 400);
+      }, 400, undefined, env);
     }
 
     // Call the subscription processing function with normalized email
@@ -390,7 +402,7 @@ async function handleSubscriptionRequest(
     return createCORSResponse({
       success: false,
       message: 'Invalid request format'
-    }, 400);
+    }, 400, undefined, env, error);
   }
 }
 
@@ -472,7 +484,7 @@ export default {
               }
             };
 
-            return createCORSResponse(healthData);
+            return createCORSResponse(healthData, 200, url.pathname, env);
           } catch (error) {
             observability.recordMetric('database.health.status', 1, { status: 'error' });
             observability.recordMetric('http.errors.total', 1, {
@@ -485,7 +497,7 @@ export default {
               message: 'Database connection failed',
               error: error instanceof Error ? error.message : String(error),
               requestId
-            }, 500, url.pathname); // Pass the endpoint path
+            }, 500, url.pathname, env, error);
           }
         });
       }
@@ -521,7 +533,7 @@ export default {
         error: 'Not Found',
         path: url.pathname,
         requestId
-      }, 404, url.pathname); // Pass the endpoint path
+      }, 404, url.pathname, env);
 
     } catch (error) {
       console.error(`[${requestId}] Unhandled error:`, error);
@@ -533,9 +545,8 @@ export default {
       return createCORSResponse({
         error: 'Internal Server Error',
         requestId,
-        debug: env.ENVIRONMENT === 'staging' ?
-          (error instanceof Error ? error.message : String(error)) : undefined
-      }, 500);
+        // debug field will be added by createCORSResponse if env is staging and error is passed
+      }, 500, undefined, env, error);
     } finally {
       // Log observability data for debugging (in staging/development)
       if (env.ENVIRONMENT !== 'production') {

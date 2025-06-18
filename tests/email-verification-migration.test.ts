@@ -25,7 +25,7 @@ interface DatabaseRow {
 }
 
 // Only run these tests in local environment where we control the database
-const TEST_ENV = process.env.TEST_ENV || 'local';
+const TEST_ENV = env.ENVIRONMENT || 'local';
 
 describe(`Email Verification Database Migration Tests (${TEST_ENV} environment)`, () => {
   beforeEach(async () => {

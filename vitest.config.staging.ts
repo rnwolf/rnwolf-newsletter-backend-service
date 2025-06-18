@@ -3,7 +3,7 @@ import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
 
 export default defineWorkersConfig({
   test: {
-    setupFiles: ['./tests/setup.ts'],
+    setupFiles: ['./tests/setup-staging.ts'],
     poolOptions: {
       workers: {
         wrangler: {
@@ -16,6 +16,11 @@ export default defineWorkersConfig({
           // For staging, secrets should come from actual environment
           vars: {
             ENVIRONMENT: 'staging'
+          },
+          // Bindings are for secrets, KV, D1, etc.
+          bindings: {
+            HMAC_SECRET_KEY: process.env.HMAC_SECRET_KEY,
+            TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY
           }
         },
       },

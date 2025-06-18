@@ -21,11 +21,11 @@ if (!env.ENVIRONMENT) {
 console.log('✓ Staging test environment validated');
 
 
-// console.log('✓ Test environment setup complete', {
-//   hasHmacSecret: !!env.HMAC_SECRET_KEY,
-//   hasTurnstileSecret: !!env.TURNSTILE_SECRET_KEY,
-//   environment: env.ENVIRONMENT
-// });
+console.log('✓ Test environment setup complete', {
+  hasHmacSecret: !!env.HMAC_SECRET_KEY,
+  hasTurnstileSecret: !!env.TURNSTILE_SECRET_KEY,
+  environment: env.ENVIRONMENT
+});
 
 
 export async function setupTestDatabase(testEnv: any) {

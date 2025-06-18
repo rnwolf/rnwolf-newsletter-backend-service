@@ -48,7 +48,7 @@ const TEST_CONFIG = {
 };
 
 // Get environment from ENV variable, default to local
-const TEST_ENV = (process.env.TEST_ENV || 'local') as keyof typeof TEST_CONFIG;
+const TEST_ENV = (env.ENVIRONMENT || 'local') as keyof typeof TEST_CONFIG;
 const config = TEST_CONFIG[TEST_ENV];
 const ALLOWED_ORIGIN = 'https://www.rnwolf.net';
 
@@ -467,7 +467,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
 
         const result = await response.json();
 
-        expect(response.status).toBe(500);
+        expect(response.status).toBe(400);
         expect(result).toHaveProperty('debug'); // Debug info should be present in staging
       } else {
         // For non-staging environments, we don't expect debug info

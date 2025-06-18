@@ -30,7 +30,7 @@ const TEST_CONFIG = {
   }
 };
 
-const TEST_ENV = (process.env.TEST_ENV || 'local') as keyof typeof TEST_CONFIG;
+const TEST_ENV = (env.ENVIRONMENT || 'local') as keyof typeof TEST_CONFIG;
 const config = TEST_CONFIG[TEST_ENV];
 
 // Helper function to make requests
