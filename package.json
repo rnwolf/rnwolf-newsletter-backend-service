@@ -8,13 +8,11 @@
     "test": "tests"
   },
   "scripts": {
-
     "dev": "wrangler dev --env local",
     "dev:staging": "wrangler dev --env staging",
     "dev:remote": "wrangler dev --env local --remote",
-    "secrets:staging": "dotenv -e .env.staging -- sh -c 'echo \"$HMAC_SECRET_KEY\" | npx wrangler secret put HMAC_SECRET_KEY --env staging && echo \"$TURNSTILE_SECRET_KEY\" | npx wrangler secret put TURNSTILE_SECRET_KEY --env staging'",
-    "secrets:production": "dotenv -e .env.production -- sh -c 'echo \"$HMAC_SECRET_KEY\" | npx wrangler secret put HMAC_SECRET_KEY --env production && echo \"$TURNSTILE_SECRET_KEY\" | npx wrangler secret put TURNSTILE_SECRET_KEY --env production'",
-
+    "secrets:staging": "dotenv -e .env.staging -- sh -c 'echo \"$HMAC_SECRET_KEY\" | npx wrangler secret put HMAC_SECRET_KEY --env staging && echo \"$TURNSTILE_SECRET_KEY\" | npx wrangler secret put TURNSTILE_SECRET_KEY --env staging && echo \"$GRAFANA_API_KEY\" | npx wrangler secret put GRAFANA_API_KEY --env staging'",
+    "secrets:production": "dotenv -e .env.production -- sh -c 'echo \"$HMAC_SECRET_KEY\" | npx wrangler secret put HMAC_SECRET_KEY --env production && echo \"$TURNSTILE_SECRET_KEY\" | npx wrangler secret put TURNSTILE_SECRET_KEY --env production && echo \"$GRAFANA_API_KEY\" | npx wrangler secret put GRAFANA_API_KEY --env production'",
     "deploy:staging": "dotenv -e .env.staging -- wrangler deploy --env staging",
     "deploy:production": "dotenv -e .env.production -- wrangler deploy --env production",
     "test": "vitest run --config vitest.config.local.ts",
@@ -49,11 +47,9 @@
     "test:email-verification:unit": "vitest run tests/email-verification.test.ts",
     "test:email-verification:integration": "vitest run tests/email-verification-integration.test.ts",
     "test:email-verification:queue": "vitest run tests/queue-processing.test.ts",
-
     "db:migrate:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --file=./migrations/001_initial_schema.sql",
     "db:migrate:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --env staging --remote --file=./migrations/001_initial_schema.sql",
     "db:migrate:production": "dotenv -e .env.production -- wrangler d1 execute DB --env production --remote --file=./migrations/001_initial_schema.sql",
-
     "db:migrate:verification:local": "wrangler d1 execute DB --env local --file=./migrations/002_add_email_verification.sql",
     "db:migrate:verification:staging": "wrangler d1 execute DB --env staging --remote --file=./migrations/002_add_email_verification.sql",
     "db:migrate:verification:production": "wrangler d1 execute DB --env production --remote --file=./migrations/002_add_email_verification.sql",
@@ -93,6 +89,6 @@
     "dotenv-cli": "^8.0.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4",
-    "wrangler": "^4.20.1"
+    "wrangler": "^4.20.3"
   }
 }

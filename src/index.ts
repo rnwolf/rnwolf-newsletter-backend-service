@@ -417,6 +417,14 @@ export default {
     try {
       // Check if this is a metrics endpoint request
       if (url.pathname.startsWith('/metrics')) {
+        // Log information relevant to metrics authentication
+        const authHeader = request.headers.get('Authorization');
+        console.log(`[${requestId}] Metrics request received for path: ${url.pathname}`);
+        console.log(`[${requestId}] Metrics Auth Header: ${authHeader}`);
+        // Be cautious logging the full secret. Log its presence or length for security.
+        console.log(`[${requestId}] env.GRAFANA_API_KEY present: ${!!env.GRAFANA_API_KEY}`);
+        if (env.GRAFANA_API_KEY) console.log(`[${requestId}] env.GRAFANA_API_KEY length: ${env.GRAFANA_API_KEY.length}`);
+
         const metricsHandler = new MetricsHandler(env, observability);
         return await metricsHandler.handleMetricsRequest(request);
       }

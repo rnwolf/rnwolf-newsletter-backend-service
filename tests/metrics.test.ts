@@ -22,19 +22,19 @@ const TEST_CONFIG = {
     baseUrl: 'http://localhost:8787',
     useWorkerFetch: true,
     setupDatabase: true,
-    testToken: 'local-test-key'
+    // testToken will be read from env.GRAFANA_API_KEY
   },
   staging: {
     baseUrl: 'https://api-staging.rnwolf.net',
     useWorkerFetch: false,
     setupDatabase: false,
-    testToken: process.env.GRAFANA_API_KEY_STAGING
+    // testToken will be read from env.GRAFANA_API_KEY
   },
   production: {
     baseUrl: 'https://api.rnwolf.net',
     useWorkerFetch: false,
     setupDatabase: false,
-    testToken: process.env.GRAFANA_API_KEY_PRODUCTION
+    // testToken will be read from env.GRAFANA_API_KEY
   }
 };
 
@@ -56,8 +56,8 @@ async function makeRequest(path: string, options?: RequestInit): Promise<Respons
 // Helper to make authenticated metrics requests
 async function makeMetricsRequest(path: string): Promise<Response> {
   return makeRequest(path, {
-    headers: {
-      'Authorization': `Bearer ${config.testToken}`,
+    headers: { // Use env.GRAFANA_API_KEY directly from the test environment
+      'Authorization': `Bearer ${env.GRAFANA_API_KEY}`,
       'Content-Type': 'application/json'
     }
   });
@@ -70,7 +70,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
 
       // Set test environment variables for local testing
       if (!env.GRAFANA_API_KEY) {
-        (env as any).GRAFANA_API_KEY = config.testToken;
+        (env as any).GRAFANA_API_KEY = 'local-test-key'; // Set a local fallback if not provided by dotenv
       }
       if (!env.ENVIRONMENT) {
         (env as any).ENVIRONMENT = TEST_ENV;

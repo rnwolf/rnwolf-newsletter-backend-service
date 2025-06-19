@@ -23,7 +23,8 @@ export default defineWorkersConfig({
           },
           // Bindings are for secrets, KV, D1, etc.
           bindings: {
-            HMAC_SECRET_KEY: process.env.HMAC_SECRET_KEY,
+            HMAC_SECRET_KEY: process.env.HMAC_SECRET_KEY, // Value comes from dotenv
+            GRAFANA_API_KEY: process.env.GRAFANA_API_KEY, // Value comes from dotenv
             TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY
           }
         },
