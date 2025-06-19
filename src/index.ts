@@ -68,7 +68,8 @@ function createCORSResponse(
 ): Response {
   // Use permissive CORS for email-related endpoints
   const isEmailEndpoint = endpoint === '/v1/newsletter/verify' || endpoint === '/v1/newsletter/unsubscribe';
-  const allowedOrigin = isEmailEndpoint ? '*' : (env?.CORS_ORIGIN || 'https://www.rnwolf.net'); // Default to production if not set, but should be set by env
+  const isHealthEndpoint = endpoint === '/' || endpoint === '/health';
+  const allowedOrigin = (isEmailEndpoint || isHealthEndpoint) ? '*' : (env?.CORS_ORIGIN || 'https://www.rnwolf.net'); // Default to production if not set, but should be set by env
 
   const baseHeaders: HeadersInit = {
     'Access-Control-Allow-Origin': allowedOrigin,
@@ -79,7 +80,7 @@ function createCORSResponse(
   };
 
   // If the request is for the root/health endpoint and not an email endpoint, allow GET
-  if (!isEmailEndpoint && (endpoint === '/' || endpoint === '/health')) {
+  if (isHealthEndpoint) { // Simplified condition
     baseHeaders['Access-Control-Allow-Methods'] = 'GET, OPTIONS';
   }
 
@@ -424,11 +425,12 @@ export default {
       if (request.method === 'OPTIONS') {
         const url = new URL(request.url);
         const isEmailEndpoint = url.pathname === '/v1/newsletter/unsubscribe' || url.pathname === '/v1/newsletter/verify';
+        const isHealthEndpoint = url.pathname === '/' || url.pathname === '/health';
 
-        // Log the received CORS_ORIGIN from env for debugging
+        // Log the received CORS_ORIGIN from env for debugging - KEEP THIS FOR NOW
         console.log(`[${requestId}] OPTIONS Handler: env.CORS_ORIGIN = "${env.CORS_ORIGIN}", env.ENVIRONMENT = "${env.ENVIRONMENT}"`);
 
-        const allowedOrigin = isEmailEndpoint ? '*' : (env.CORS_ORIGIN || 'https://www.rnwolf.net'); // Use env.CORS_ORIGIN, fallback for safety
+        const allowedOrigin = (isEmailEndpoint || isHealthEndpoint) ? '*' : (env.CORS_ORIGIN || 'https://www.rnwolf.net'); // Use env.CORS_ORIGIN, fallback for safety
         console.log(`[${requestId}] OPTIONS Handler: determined allowedOrigin = "${allowedOrigin}" for endpoint ${url.pathname}`);
         let allowedMethods = 'POST, GET, OPTIONS'; // Default allowed methods
 

@@ -92,7 +92,13 @@ async function makeRequest(path: string, options?: RequestInit): Promise<Respons
     console.log(`[${TEST_ENV}] Request options:`, JSON.stringify(requestOptions, (key, value) =>
       typeof value === 'bigint' ? value.toString() : value, 2));
 
-    const response = await fetch(url, requestOptions);
+    let response;
+    try {
+      response = await fetch(url, requestOptions); // Line 95
+    } catch (error) {
+      console.error(`[${TEST_ENV}] Fetch request to ${url} failed:`, error);
+      throw error; // Re-throw the error so the test still fails
+    }
 
     console.log(`[${TEST_ENV}] Response status from ${url}: ${response.status}`);
     const responseHeaders = Object.fromEntries(response.headers.entries());

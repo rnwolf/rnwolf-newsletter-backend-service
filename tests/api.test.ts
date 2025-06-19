@@ -160,7 +160,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       expect(response.status).toBe(200);
 
       // Verify CORS headers in health check
-      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*'); // Health endpoint should now allow any origin
       expect(response.headers.get('Access-Control-Allow-Methods')).toContain('GET');
     });
 
@@ -203,7 +203,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
       });
 
       expect(healthPreflight.status).toBe(200);
-      expect(healthPreflight.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+      expect(healthPreflight.headers.get('Access-Control-Allow-Origin')).toBe('*'); // Health endpoint should now allow any origin
 
       // Test preflight for subscription endpoint
       const subscribePreflight = await makeRequest('/v1/newsletter/subscribe', {
