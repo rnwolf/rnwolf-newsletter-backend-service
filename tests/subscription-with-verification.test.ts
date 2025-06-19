@@ -498,7 +498,7 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: testEmail,
-          turnstileToken: 'valid-token-123'
+          turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX' // Use the dummy response token
         })
       });
 
@@ -665,7 +665,7 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
           'User-Agent': 'Mozilla/5.0 Test Browser'
           //'CF-IPCountry': 'US'   NOT ALLOWED BY CLOUDFLARE
         },
-    body: JSON.stringify({ email: testEmail, turnstileToken: '1x00000000000000000000AA' }) // Use Cloudflare's "Always Passes" test token
+    body: JSON.stringify({ email: testEmail, turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX' }) // Use the dummy response token
       });
 
       expect(response.status).toBe(200);

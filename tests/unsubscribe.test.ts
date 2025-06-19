@@ -79,6 +79,9 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
 
   describe('Token Validation', () => {
     it('should accept valid HMAC tokens', async () => {
+      // This test relies on the 'subscribed@example.com' user existing from beforeEach setup
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const email = 'subscribed@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
 
@@ -91,16 +94,14 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
       expect(html).toContain('Successfully Unsubscribed');
       expect(html).toContain('You have been unsubscribed from our newsletter');
 
-      // For local tests, verify database was updated
-      if (TEST_ENV === 'local') {
-        const subscriber = await env.DB.prepare(
-          'SELECT unsubscribed_at FROM subscribers WHERE email = ?'
-        ).bind(email).first() as DatabaseRow | null;
+      // Verify database was updated (only possible in local setup)
+      const subscriber = await env.DB.prepare(
+        'SELECT unsubscribed_at FROM subscribers WHERE email = ?'
+      ).bind(email).first() as DatabaseRow | null;
 
-        if (subscriber) {
-          expect(subscriber.unsubscribed_at).toBeTruthy();
-        }
-      }
+      expect(subscriber).toBeTruthy();
+      expect(subscriber?.unsubscribed_at).toBeTruthy();
+
     });
 
     it('should reject invalid HMAC tokens', async () => {
@@ -118,6 +119,9 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should reject tokens generated with wrong secret', async () => {
+      // This test relies on the 'subscribed@example.com' user existing from beforeEach setup
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const email = 'subscribed@example.com';
       const wrongSecretToken = generateTestUnsubscribeToken(email, 'wrong-secret');
 
@@ -130,6 +134,9 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should reject tokens for different email addresses', async () => {
+      // This test relies on the 'subscribed@example.com' user existing from beforeEach setup
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const originalEmail = 'subscribed@example.com';
       const differentEmail = 'different@example.com';
       const token = generateTestUnsubscribeToken(originalEmail, env.HMAC_SECRET_KEY || 'test-secret');
@@ -169,7 +176,8 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
 
   describe('Database Operations', () => {
     it('should mark subscribed user as unsubscribed', async () => {
-      if (TEST_ENV !== 'local') return; // Skip for remote tests
+       // This test relies on 'subscribed@example.com' existing and checks DB state directly.
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const email = 'subscribed@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
@@ -196,6 +204,10 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should handle already unsubscribed users gracefully', async () => {
+      // This test relies on 'already-unsubscribed@example.com' existing.
+      // It does NOT check DB state directly after the request.
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const email = 'already-unsubscribed@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
 
@@ -209,6 +221,7 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should handle non-existent email addresses', async () => {
+      // This test does NOT rely on setupDatabase, as it tests a non-existent email
       const email = 'nonexistent@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
 
@@ -222,7 +235,8 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should handle database errors gracefully', async () => {
-      if (TEST_ENV !== 'local') return; // Skip for remote tests
+      // This test relies on 'subscribed@example.com' existing and mocks DB.
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
 
       const email = 'subscribed@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
@@ -266,6 +280,10 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should handle URL encoded email addresses', async () => {
+      // This test relies on a user being subscribed (inserts if local).
+      // It does NOT check DB state directly after the request.
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const email = 'user+test@example.com';
       const encodedEmail = encodeURIComponent(email);
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
@@ -287,6 +305,9 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should return proper CORS headers for any origin', async () => {
+      // This test relies on 'subscribed@example.com' existing from beforeEach setup.
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const email = 'subscribed@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
 
@@ -312,7 +333,12 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
   });
 
   describe('HTML Response Generation', () => {
+    // These tests rely on the initial state from beforeEach for the email used
+
     it('should return proper HTML structure for success', async () => {
+      // This test relies on 'subscribed@example.com' existing from beforeEach setup.
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const email = 'subscribed@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
 
@@ -338,6 +364,7 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should return proper HTML structure for errors', async () => {
+      // This test does NOT rely on setupDatabase
       const response = await makeRequest('/v1/newsletter/unsubscribe?token=invalid&email=test@example.com');
 
       expect(response.status).toBe(400);
@@ -352,6 +379,10 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should include proper styling and responsive design', async () => {
+      // This test relies on the 'subscribed@example.com' user existing from beforeEach setup.
+      // It does NOT check DB state directly after the request.
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const email = 'subscribed@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
 
@@ -371,6 +402,8 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
   });
 
   describe('Integration with Main Worker', () => {
+    // These tests do NOT rely on setupDatabase
+
     it('should be accessible via main worker routing', async () => {
       const email = 'subscribed@example.com';
       const token = generateTestUnsubscribeToken(email, env.HMAC_SECRET_KEY || 'test-secret');
@@ -394,6 +427,7 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
   });
 
   describe('Error Response Edge Cases', () => {
+    // These tests do NOT rely on setupDatabase
     it('should handle extremely long URLs gracefully', async () => {
       const longEmail = 'a'.repeat(1000) + '@example.com';
       const token = 'some-token';
@@ -405,6 +439,10 @@ describe(`Unsubscribe Worker Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should handle special characters in email', async () => {
+      // This test relies on a user being subscribed (inserts if local).
+      // It does NOT check DB state directly after the request.
+      if (!config.setupDatabase) return; // Skip if not local with DB setup
+
       const specialEmail = 'user+tag@ex-ample.co.uk';
       const token = generateTestUnsubscribeToken(specialEmail, env.HMAC_SECRET_KEY || 'test-secret');
 

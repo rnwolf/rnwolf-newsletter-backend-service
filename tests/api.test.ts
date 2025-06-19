@@ -429,33 +429,41 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should return troubleshooting URL for Turnstile failures', async () => {
-      // Mock Turnstile failure only for local tests
-      if (config.isLocal) {
-        global.fetch = vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ success: false }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          })
-        );
+      // This test is only meaningful in the local environment where we can mock Turnstile failure.
+      // In staging/production with "Always Passes" test keys, Turnstile will succeed.
+      if (!config.isLocal) {
+        console.log(`Skipping Turnstile failure test for ${TEST_ENV} environment as Turnstile is expected to pass.`);
+        return;
       }
+
+      // Ensure the global.fetch mock is set up to simulate Turnstile failure for this local test
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn().mockImplementation(async (url, options) => {
+        if (url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+          console.log(`[${TEST_ENV}] Mocking Turnstile siteverify to return success: false for this test`);
+          return Promise.resolve(
+            new Response(JSON.stringify({ success: false, 'error-codes': ['invalid-input-response'] }), { // Simulate failure
+              status: 200, // The siteverify endpoint itself returns 200 even on failure
+              headers: { 'Content-Type': 'application/json' },
+            })
+          );
+        }
+        return originalFetch(url, options); // Fallback to original fetch for other calls
+      });
 
       const response = await makeRequest('/v1/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: generateTestEmail('test@example.com'),
-          turnstileToken: 'invalid-token'
-        })
+        body: JSON.stringify({ email: generateTestEmail('turnstile-fail@example.com'), turnstileToken: 'any-token-will-be-failed-by-mock' })
       });
 
       const result = await response.json();
+      expect(response.status).toBe(400); // Expecting 400 due to mocked Turnstile failure
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Please complete the security verification');
+      expect(result.troubleshootingUrl).toBe('https://www.rnwolf.net/troubleshooting');
 
-      expect(response.status).toBe(400);
-      expect(result).toMatchObject({
-        success: false,
-        message: expect.stringContaining('Please complete the security verification'),
-        troubleshootingUrl: 'https://www.rnwolf.net/troubleshooting'
-      });
+      global.fetch = originalFetch; // Restore original fetch
     });
 
     it('should include debug info only in staging environment', async () => {
