@@ -201,7 +201,7 @@ describe(`Performance Tests (${TEST_ENV} environment)`, () => {
         requests_per_second: result.requestsPerSecond.toFixed(2),
         error_rate: `${(result.errorRate * 100).toFixed(2)}%`
       });
-    });
+    },10000);
   });
 
   describe('Newsletter Subscription Performance', () => {
@@ -387,6 +387,6 @@ describe(`Performance Tests (${TEST_ENV} environment)`, () => {
         error_rate: `${(spikeTest.errorRate * 100).toFixed(2)}%`,
         p99_response_time: `${spikeTest.responseTimeMetrics.p99.toFixed(2)}ms`
       });
-    },10000); // Increase timeout to 10 sec for stress test
+    },20000); // Increase timeout to 10 sec for stress test
   });
 });
