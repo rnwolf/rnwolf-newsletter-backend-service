@@ -457,7 +457,7 @@ describe(`API Tests (${TEST_ENV} environment)`, () => {
         body: JSON.stringify({ email: generateTestEmail('turnstile-fail@example.com'), turnstileToken: 'any-token-will-be-failed-by-mock' })
       });
 
-      const result = await response.json();
+      const result = await response.json() as SubscriptionResponse;
       expect(response.status).toBe(400); // Expecting 400 due to mocked Turnstile failure
       expect(result.success).toBe(false);
       expect(result.message).toContain('Please complete the security verification');

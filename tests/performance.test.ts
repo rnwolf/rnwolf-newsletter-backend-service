@@ -57,6 +57,13 @@ const TEST_CONFIG = {
 const TEST_ENV = (env.ENVIRONMENT || 'local') as keyof typeof TEST_CONFIG;
 const config = TEST_CONFIG[TEST_ENV];
 
+// Helper function to generate a unique email for performance tests
+function generatePerformanceTestEmail(): string {
+  const timestamp = Date.now();
+  const randomPart = Math.random().toString(36).substring(2, 8);
+  return `perf-test-${timestamp}-${randomPart}@performance-test.example.com`;
+}
+
 // Helper function to make requests
 async function makeRequest(path: string, options?: RequestInit): Promise<Response> {
   const url = `${config.baseUrl}${path}`;
@@ -211,9 +218,7 @@ describe(`Performance Tests (${TEST_ENV} environment)`, () => {
       const result = await runLoadTest(
         'Newsletter Subscription Load Test',
         () => {
-          const uniqueEmail = TEST_ENV === 'local'
-            ? `load-test-${requestCounter++}@example.com`
-            : `load-test-${Date.now()}-${requestCounter++}@example.com`;
+          const uniqueEmail = generatePerformanceTestEmail();
 
           return makeRequest('/v1/newsletter/subscribe', {
             method: 'POST',

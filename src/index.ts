@@ -1,10 +1,13 @@
 // src/index.ts - Corrected version with proper function routing
 import { handleUnsubscribe } from './unsubscribe-handler';
 import { handleEmailVerification } from './email-verification-handler';
+// Import the EmailVerificationMessage interface
+import { EmailVerificationMessage } from './email-verification-worker';
 import { handleEmailVerificationQueue } from './email-verification-worker';
 import { WorkerObservability, PerformanceMonitor } from './observability/otel';
 import { MetricsHandler } from './metrics/metrics-handler';
 
+// Define the expected message type for the queue
 interface Env {
   DB: D1Database;
   TURNSTILE_SECRET_KEY: string;
@@ -13,6 +16,10 @@ interface Env {
   GRAFANA_API_KEY: string;
   CORS_ORIGIN: string;
   EMAIL_VERIFICATION_QUEUE: Queue;
+  MAILCHANNEL_API_KEY: string; // Added for MailChannels
+  SENDER_EMAIL: string;        // Added for MailChannels
+  SENDER_NAME: string;         // Added for MailChannels
+  MAILCHANNEL_AUTH_ID?: string; // Optional, Added for MailChannels
 }
 
 interface SubscriptionData {
@@ -559,7 +566,7 @@ export default {
   },
 
   // Queue consumer for email verification
-  async queue(batch: MessageBatch, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<EmailVerificationMessage>, env: Env): Promise<void> {
     return await handleEmailVerificationQueue(batch, env);
   }
 };

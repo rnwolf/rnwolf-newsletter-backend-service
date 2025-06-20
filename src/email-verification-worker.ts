@@ -1,7 +1,6 @@
 // src/email-verification-worker.ts
 // Queue consumer for sending verification emails
-
-interface EmailVerificationMessage {
+export interface EmailVerificationMessage {
   email: string;
   verificationToken: string;
   subscribedAt: string;
@@ -17,6 +16,10 @@ interface Env {
   HMAC_SECRET_KEY: string;
   ENVIRONMENT: string;
   EMAIL_VERIFICATION_QUEUE: Queue;
+  MAILCHANNEL_API_KEY: string; // Added for MailChannels
+  SENDER_EMAIL: string;
+  SENDER_NAME: string;
+  MAILCHANNEL_AUTH_ID?: string; // Optional
 }
 
 export default {
@@ -138,7 +141,10 @@ function generateVerificationEmail(email: string, verificationUrl: string, subsc
         <p style="word-break: break-all; font-family: monospace; background: #f8f9fa; padding: 10px; border-radius: 4px;">
             ${verificationUrl}
         </p>
-
+        </br>
+        <p>After you have clicked on the link please hit the reply to this email and let me know what country you are in. This is to help me understand where my readers are located and to improve the content I send out.</p>
+        <p>Thanks Rüdiger!</p>
+        </br>
         <div class="footer">
             <p><strong>Didn't sign up for this newsletter?</strong><br>
             No worries! Just ignore this email and you won't receive any future messages from us.</p>
@@ -161,6 +167,10 @@ You recently signed up for our newsletter with this email address: ${email}
 To complete your subscription and start receiving our monthly newsletter, please click this link:
 ${verificationUrl}
 
+After you have clicked on the link please hit the reply to this email and let me know what country you are in. This is to help me understand where my readers are located and to improve the content I send out.
+Thanks Rüdiger!
+
+
 Why are we asking for confirmation?
 This extra step helps us ensure that only you can subscribe this email address to our newsletter. It also helps prevent spam and protects your inbox.
 
@@ -177,24 +187,39 @@ Visit our website: https://www.rnwolf.net/
 
 async function sendVerificationEmail(email: string, content: { subject: string; html: string; text: string }, env: Env): Promise<void> {
   // Using MailChannels (free tier is discontinued but paid tier available)
-  // Or integrate with your preferred email service
+
+  // Check if this is a performance test email and skip actual sending
+  if (email.endsWith('@performance-test.example.com')) {
+    console.log(`[PERF_TEST_SKIP] Skipping actual email send for performance test email: ${email}`);
+    return; // Do not proceed to send the email
+  }
+
+  if (!env.MAILCHANNEL_API_KEY) {
+    console.error('MAILCHANNEL_API_KEY is not defined. Email sending will fail.');
+    throw new Error('MailChannels API key is not configured.');
+  }
+
+  if (!env.SENDER_EMAIL || !env.SENDER_NAME) {
+    console.error('SENDER_EMAIL or SENDER_NAME is not defined. Email sending will fail.');
+    throw new Error('SENDER_EMAIL or SENDER_NAME is not configured.');
+  }
 
   const response = await fetch('https://api.mailchannels.net/tx/v1/send', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-api-key': env.MAILCHANNEL_API_KEY, // Add the API key header
+      'X-MailChannels-Auth-Id': env.MAILCHANNEL_AUTH_ID || '' // Optional, if you have an auth ID
     },
     body: JSON.stringify({
       personalizations: [
         {
           to: [{ email: email }],
-          dkim_domain: 'rnwolf.net', // Your domain
-          dkim_selector: 'mailchannels'
         }
       ],
       from: {
-        email: 'newsletter@rnwolf.net',
-        name: 'RN Wolf Newsletter'
+        email: env.SENDER_EMAIL,
+        name: env.SENDER_NAME,
       },
       subject: content.subject,
       content: [

@@ -1,5 +1,5 @@
 // tests/queue-processing.test.ts
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, Mock } from 'vitest';
 import { env } from 'cloudflare:test';
 import { setupTestDatabase } from './setup';
 import { handleEmailVerificationQueue } from '../src/email-verification-worker';
@@ -15,6 +15,11 @@ interface EmailVerificationMessage {
   };
 }
 
+// Interface for the content parts within the email body sent to MailChannels/SendGrid
+interface EmailContentPart {
+  type: string;
+  value: string;
+}
 interface MockMessage {
   body: EmailVerificationMessage;
   ack: () => void;
@@ -109,7 +114,7 @@ describe('Queue Processing Tests (local only)', () => {
       expect(mockMessage.retry).not.toHaveBeenCalled();
 
       // Verify email API was called
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(global.fetch as Mock).toHaveBeenCalledWith(
         'https://api.mailchannels.net/tx/v1/send',
         expect.objectContaining({
           method: 'POST',
@@ -168,7 +173,7 @@ describe('Queue Processing Tests (local only)', () => {
       await handleEmailVerificationQueue(batch as any, env);
 
       // Verify all messages were acknowledged
-      mockMessages.forEach(msg => {
+      mockMessages.forEach((msg: MockMessage) => {
         expect(msg.ack).toHaveBeenCalled();
         expect(msg.retry).not.toHaveBeenCalled();
       });
@@ -323,9 +328,9 @@ describe('Queue Processing Tests (local only)', () => {
 
       await handleEmailVerificationQueue(batch as any, env);
 
-      const emailCall = (global.fetch as any).mock.calls[0];
+      const emailCall = (global.fetch as Mock).mock.calls[0];
       const emailBody = JSON.parse(emailCall[1].body);
-      const htmlContent = emailBody.content.find((c: any) => c.type === 'text/html');
+      const htmlContent = emailBody.content.find((c: EmailContentPart) => c.type === 'text/html');
 
       // Check for security explanation
       expect(htmlContent.value).toContain('Why are we asking for confirmation?');
@@ -356,9 +361,9 @@ describe('Queue Processing Tests (local only)', () => {
 
       await handleEmailVerificationQueue(batch as any, env);
 
-      const emailCall = (global.fetch as any).mock.calls[0];
+      const emailCall = (global.fetch as Mock).mock.calls[0];
       const emailBody = JSON.parse(emailCall[1].body);
-      const htmlContent = emailBody.content.find((c: any) => c.type === 'text/html');
+      const htmlContent = emailBody.content.find((c: EmailContentPart) => c.type === 'text/html');
 
       // Check for "didn't sign up" message
       expect(htmlContent.value).toContain('Didn\'t sign up for this newsletter?');
@@ -497,7 +502,7 @@ describe('Queue Processing Tests (local only)', () => {
 
       await handleEmailVerificationQueue(batch as any, env);
 
-      const emailCall = (global.fetch as any).mock.calls[0];
+      const emailCall = (global.fetch as Mock).mock.calls[0];
       const emailBody = JSON.parse(emailCall[1].body);
 
       // Should use rnwolf.net domain for local testing
@@ -527,7 +532,7 @@ describe('Queue Processing Tests (local only)', () => {
 
       await handleEmailVerificationQueue(batch as any, env);
 
-      const emailCall = (global.fetch as any).mock.calls[0];
+      const emailCall = (global.fetch as Mock).mock.calls[0];
       const emailBody = JSON.parse(emailCall[1].body);
       const htmlContent = emailBody.content.find((c: any) => c.type === 'text/html');
 
@@ -595,7 +600,7 @@ describe('Queue Processing Tests (alternative approach)', () => {
     expect(global.fetch).toHaveBeenCalled();
     expect(testMessage.ack).toHaveBeenCalled();
 
-    const fetchCall = global.fetch.mock.calls[0];
+    const fetchCall = (global.fetch as Mock).mock.calls[0];
     const emailBody = JSON.parse(fetchCall[1].body);
 
     expect(emailBody.content[0].value).toContain('test%40example.com'); // URL encoded
@@ -710,23 +715,26 @@ describe('New Queue Processing Tests (local only)', () => {
       expect(global.fetch).toHaveBeenCalled();
       expect(testMessage.ack).toHaveBeenCalled();
 
-      const fetchCall = global.fetch.mock.calls[0];
-      const [url, options] = fetchCall;
+      const fetchCall = (global.fetch as Mock).mock.calls[0];
+      const [url, options] = fetchCall as [string, RequestInit]; // Cast to tuple type
 
       // Check SendGrid API call
       expect(url).toBe('https://api.sendgrid.com/v3/mail/send');
       expect(options.method).toBe('POST');
-      expect(options.headers['Authorization']).toContain('Bearer');
-      expect(options.headers['Content-Type']).toBe('application/json');
+
+      expect(options.headers).toBeDefined(); // Ensure headers object exists
+      const headers = options.headers as Record<string, string>; // Cast to plain object
+      expect(headers['Authorization']).toContain('Bearer');
+      expect(headers['Content-Type']).toBe('application/json');
 
       // Parse email body
-      const emailBody = JSON.parse(options.body);
+      const emailBody = JSON.parse(options.body as string); // options.body is BodyInit | null
 
       // Verify email structure matches your expected format
       expect(emailBody).toMatchObject({
         personalizations: [
           {
-            to: [{ email: 'content-test@example.com' }],
+            to: [{ email: 'content-test@example.com' } as { email: string }],
             subject: 'Confirm Your Newsletter Subscription'
           }
         ],
@@ -739,8 +747,8 @@ describe('New Queue Processing Tests (local only)', () => {
       // Verify content exists
       expect(emailBody.content).toHaveLength(2); // HTML and text versions
 
-      const htmlContent = emailBody.content.find(c => c.type === 'text/html');
-      const textContent = emailBody.content.find(c => c.type === 'text/plain');
+      const htmlContent = emailBody.content.find((c: EmailContentPart) => c.type === 'text/html');
+      const textContent = emailBody.content.find((c: EmailContentPart) => c.type === 'text/plain');
 
       // Additional specific content checks
       expect(htmlContent.value).toContain('content-test@example.com');
@@ -822,11 +830,11 @@ describe('New Queue Processing Tests (local only)', () => {
       expect(global.fetch).toHaveBeenCalled();
       expect(testMessage.ack).toHaveBeenCalled();
 
-      const fetchCall = global.fetch.mock.calls[0];
+      const fetchCall = (global.fetch as Mock).mock.calls[0];
       const emailBody = JSON.parse(fetchCall[1].body);
 
-      const htmlContent = emailBody.content.find(c => c.type === 'text/html');
-      const textContent = emailBody.content.find(c => c.type === 'text/plain');
+      const htmlContent = emailBody.content.find((c: EmailContentPart) => c.type === 'text/html');
+      const textContent = emailBody.content.find((c: EmailContentPart) => c.type === 'text/plain');
 
       // The email should be URL-encoded in verification links
       const expectedEncodedEmail = encodeURIComponent(specialEmail); // user%2Btest%40domain.co.uk
@@ -843,7 +851,7 @@ describe('New Queue Processing Tests (local only)', () => {
 
       // Check that the email parameter in URLs is properly encoded
       for (const match of urlMatches) {
-        const emailParam = match[1];
+        const emailParam = match[1] as string;
         expect(emailParam).toBe(expectedEncodedEmail);
         expect(emailParam).not.toBe(specialEmail); // Should not be the raw email
       }
@@ -851,7 +859,7 @@ describe('New Queue Processing Tests (local only)', () => {
       // Also check text content URLs
       const textUrlMatches = [...textContent.value.matchAll(urlPattern)];
       for (const match of textUrlMatches) {
-        const emailParam = match[1];
+        const emailParam = match[1] as string;
         expect(emailParam).toBe(expectedEncodedEmail);
       }
 

@@ -6,6 +6,10 @@ interface CloudflareEnv {
   CORS_ORIGIN: string;
   GRAFANA_API_KEY: string;
   EMAIL_VERIFICATION_QUEUE: Queue<any>;
+  MAILCHANNEL_API_KEY: string;
+  SENDER_EMAIL: string;
+  SENDER_NAME: string;
+  MAILCHANNEL_AUTH_ID?: string; // Optional
 }
 
 declare module 'cloudflare:test' {

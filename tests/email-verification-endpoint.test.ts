@@ -455,9 +455,10 @@ describe('Email Verification Endpoint Tests', () => {
       'SELECT email_verified, verified_at, verification_token FROM subscribers WHERE email = ?'
     ).bind(testEmail).first();
 
-    expect(subscriber.email_verified).toBe(1); // SQLite returns 1 for TRUE
-    expect(subscriber.verified_at).toBeTruthy();
-    expect(subscriber.verification_token).toBeNull();
+    expect(subscriber).toBeTruthy(); // Assert that the subscriber record exists
+    expect(subscriber!.email_verified).toBe(1); // SQLite returns 1 for TRUE
+    expect(subscriber!.verified_at).toBeTruthy();
+    expect(subscriber!.verification_token).toBeNull();
   });
 
 });

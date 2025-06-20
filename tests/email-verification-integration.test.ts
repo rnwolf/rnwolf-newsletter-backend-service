@@ -12,7 +12,7 @@ interface SubscriptionResponse {
 
 interface DatabaseRow {
   email: string;
-  email_verified: boolean;
+  email_verified: number | null; // SQLite returns 0 for FALSE, 1 for TRUE, can be null from .first()
   verification_token: string | null;
   verification_sent_at: string | null;
   verified_at: string | null;

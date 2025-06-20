@@ -14,7 +14,7 @@ interface SubscriptionResponse {
 
 interface DatabaseRow {
   email: string;
-  email_verified: boolean;
+  email_verified: number | null; // SQLite returns 0 for FALSE, 1 for TRUE, can be null before migration or from .first()
   verification_token: string | null;
   verification_sent_at: string | null;
   verified_at: string | null;
@@ -81,7 +81,7 @@ async function makeRequest(path: string, options?: RequestInit): Promise<Respons
         // Use the environment-specific CORS origin
         'Origin': config.corsOrigin,
         // Ensure Content-Type is set for POST requests
-        ...(options?.method === 'POST' && !options?.headers?.['Content-Type'] && {
+        ...(options?.method === 'POST' && !!(options?.headers as Record<string, string>)?.['Content-Type'] && {
           'Content-Type': 'application/json'
         })
       }
@@ -149,9 +149,23 @@ describe(`Updated Subscription Flow with Email Verification (${TEST_ENV} environ
     });
 
     // Mock for consistent token generation
-    vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
-      for (let i = 0; i < array.length; i++) {
-        array[i] = 42; // Deterministic value
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation((array: ArrayBufferView | null): ArrayBufferView | null => {
+      if (array === null) {
+        return null;
+      }
+
+      if (array instanceof DataView) { // Type guard: array is DataView
+        // Handle DataView: fill its buffer with 42s
+        for (let i = 0; i < array.byteLength; i++) {
+          array.setUint8(i, 42);
+        }
+      } else {
+        // array is now one of the TypedArray types (e.g., Uint8Array, Int32Array)
+        // All TypedArray instances have .length and are numerically indexable.
+        // Cast to Uint8Array for simpler type handling in the mock
+        for (let i = 0; i < (array as Uint8Array).length; i++) {
+          (array as Uint8Array)[i] = 42; // Deterministic value
+        }
       }
       return array;
     });

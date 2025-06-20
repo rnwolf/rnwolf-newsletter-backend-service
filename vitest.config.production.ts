@@ -25,7 +25,11 @@ export default defineWorkersConfig({
           bindings: {
             HMAC_SECRET_KEY: process.env.HMAC_SECRET_KEY, // Value comes from dotenv
             GRAFANA_API_KEY: process.env.GRAFANA_API_KEY, // Value comes from dotenv
-            TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY
+            TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
+            MAILCHANNEL_API_KEY: process.env.MAILCHANNEL_API_KEY,
+            SENDER_EMAIL: process.env.SENDER_EMAIL,
+            SENDER_NAME: process.env.SENDER_NAME,
+            MAILCHANNEL_AUTH_ID: process.env.MAILCHANNEL_AUTH_ID
           }
         },
       },

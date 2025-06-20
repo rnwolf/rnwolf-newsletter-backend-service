@@ -16,6 +16,59 @@ interface MetricsResponse {
   };
 }
 
+// Interface for the /metrics/json endpoint
+interface ComprehensiveJsonMetrics {
+  timestamp: string;
+  environment: string;
+  database: {
+    newsletter_subscribers_total: number;
+    newsletter_subscribers_active: number;
+    newsletter_subscriptions_24h: number;
+    newsletter_unsubscribes_24h: number;
+    database_status: 'connected' | 'error';
+  };
+  application: Record<string, any>; // Define more specifically if needed
+  system: Record<string, any>;      // Define more specifically if needed
+  performance: Record<string, any>; // Define more specifically if needed
+}
+
+// Interface for Prometheus API label values responses
+interface PrometheusLabelValuesResponse {
+  status: string;
+  data: string[];
+}
+
+// Interface for the /metrics/health endpoint
+interface HealthMetricsResponse {
+  overall_status: 'healthy' | 'unhealthy';
+  database: { healthy: boolean; response_time: number; error?: string };
+  application: { healthy: boolean; memory_usage: number };
+  environment: string;
+  timestamp: number;
+}
+
+// Interface for the /metrics/database endpoint
+interface DatabaseMetricsResponse {
+  newsletter_subscribers_total: number;
+  newsletter_subscribers_active: number;
+  newsletter_subscriptions_24h: number;
+  newsletter_unsubscribes_24h: number;
+  database_status: 'connected' | 'error';
+}
+
+// Interface for Prometheus API /api/v1/status/buildinfo response
+interface PrometheusBuildInfoResponse {
+  status: string;
+  data: {
+    version: string;
+    revision: string;
+    branch: string;
+    buildUser: string;
+    buildDate: string;
+    goVersion: string;
+  };
+}
+
 // Configuration based on environment
 const TEST_CONFIG = {
   local: {
@@ -338,7 +391,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('application/json');
 
-      const metrics = await response.json();
+      const metrics = await response.json() as ComprehensiveJsonMetrics;
 
       expect(metrics).toHaveProperty('timestamp');
       expect(metrics).toHaveProperty('environment');
@@ -360,7 +413,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
 
       expect(response.status).toBe(200);
 
-      const health = await response.json();
+      const health = await response.json() as HealthMetricsResponse;
 
       expect(health).toHaveProperty('overall_status');
       expect(health).toHaveProperty('database');
@@ -379,7 +432,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
 
       expect(response.status).toBe(200);
 
-      const dbMetrics = await response.json();
+      const dbMetrics = await response.json() as DatabaseMetricsResponse;
 
       expect(dbMetrics).toHaveProperty('newsletter_subscribers_total');
       expect(dbMetrics).toHaveProperty('newsletter_subscribers_active');
@@ -431,7 +484,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
 
       expect(response.status).toBe(200); // Should still respond
 
-      const dbMetrics = await response.json();
+      const dbMetrics = await response.json() as DatabaseMetricsResponse;
       expect(dbMetrics.database_status).toBe('error');
       expect(dbMetrics.newsletter_subscribers_total).toBe(-1);
 
@@ -443,7 +496,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
 
       expect(response.status).toBe(200);
 
-      const result = await response.json();
+      const result = await response.json() as MetricsResponse;
       expect(result.status).toBe('success');
       expect(result.data.result).toHaveLength(0);
     });
@@ -471,7 +524,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
 
       expect(response.status).toBe(200);
 
-      const buildInfo = await response.json();
+      const buildInfo = await response.json() as PrometheusBuildInfoResponse;
       expect(buildInfo.status).toBe('success');
       expect(buildInfo.data).toHaveProperty('version');
       expect(buildInfo.data).toHaveProperty('revision');
@@ -482,7 +535,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
 
       expect(response.status).toBe(200);
 
-      const result = await response.json();
+      const result = await response.json() as PrometheusLabelValuesResponse;
       expect(result.status).toBe('success');
       expect(Array.isArray(result.data)).toBe(true);
       expect(result.data).toContain('up');
@@ -495,7 +548,7 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
 
       expect(response.status).toBe(200);
 
-      const result = await response.json();
+      const result = await response.json() as PrometheusLabelValuesResponse;
       expect(result.status).toBe('success');
       expect(Array.isArray(result.data)).toBe(true);
       expect(result.data).toContain('__name__');
@@ -536,8 +589,8 @@ describe(`Metrics System Tests (${TEST_ENV} environment)`, () => {
       ]);
 
       const prometheusResult = await prometheusResponse.json() as MetricsResponse;
-      const jsonResult = await jsonResponse.json();
-      const dbResult = await dbResponse.json();
+      const jsonResult = await jsonResponse.json() as ComprehensiveJsonMetrics;
+      const dbResult = await dbResponse.json() as DatabaseMetricsResponse;
 
       // Extract subscriber count from each endpoint
       const prometheusCount = parseInt(prometheusResult.data.result[0].value![1]);

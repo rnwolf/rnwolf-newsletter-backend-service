@@ -28,6 +28,10 @@ export default defineWorkersConfig({
           ],
           bindings: {
             CORS_ORIGIN: 'http://localhost:3000', // From wrangler.jsonc local env
+            MAILCHANNEL_API_KEY: process.env.MAILCHANNEL_API_KEY || 'local-mailchannel-dummy-key',
+            SENDER_EMAIL: process.env.SENDER_EMAIL || 'noreply@local.dev',
+            SENDER_NAME: process.env.SENDER_NAME || 'Local Test Newsletter',
+            MAILCHANNEL_AUTH_ID: process.env.MAILCHANNEL_AUTH_ID || '', // Optional
             EMAIL_VERIFICATION_QUEUE_CONSUMER: {
               type: 'queue',
               queueName: 'email-verification-queue'

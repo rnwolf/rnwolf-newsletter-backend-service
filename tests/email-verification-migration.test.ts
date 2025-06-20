@@ -15,7 +15,7 @@ interface TableInfo {
 
 interface DatabaseRow {
   email: string;
-  email_verified: boolean | null;
+  email_verified: number | null; // SQLite returns 0 for FALSE, 1 for TRUE
   verification_token: string | null;
   verification_sent_at: string | null;
   verified_at: string | null;
@@ -77,8 +77,8 @@ describe(`Email Verification Database Migration Tests (${TEST_ENV} environment)`
 
       // Verify email_verified has correct default
       const emailVerifiedColumn = tableInfo.results.find((col: any) => col.name === 'email_verified');
-      expect(emailVerifiedColumn).toBeTruthy();
-      expect(emailVerifiedColumn.dflt_value).toBe('FALSE');
+      expect(emailVerifiedColumn).toBeTruthy(); // Ensure the column was found
+      expect(emailVerifiedColumn!.dflt_value).toBe('FALSE'); // Use non-null assertion
       console.log('✓ email_verified has correct default (FALSE)');
 
       console.log('✓ Email verification schema verified successfully');
@@ -247,9 +247,9 @@ describe(`Email Verification Database Migration Tests (${TEST_ENV} environment)`
       if (fs.existsSync(migrationPath)) {
         const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
         const statements = migrationSQL
-          .split(';')
-          .map(stmt => stmt.trim())
-          .filter(stmt => stmt.length > 0);
+          .split(';') // This results in an array of strings
+          .map((stmt: string) => stmt.trim())
+          .filter((stmt: string) => stmt.length > 0);
 
         for (const statement of statements) {
           await env.DB.prepare(statement).run();
@@ -302,9 +302,9 @@ describe(`Email Verification Database Migration Tests (${TEST_ENV} environment)`
       if (fs.existsSync(migrationPath)) {
         const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
         const statements = migrationSQL
-          .split(';')
-          .map(stmt => stmt.trim())
-          .filter(stmt => stmt.length > 0);
+          .split(';') // This results in an array of strings
+          .map((stmt: string) => stmt.trim())
+          .filter((stmt: string) => stmt.length > 0);
 
         for (const statement of statements) {
           await env.DB.prepare(statement).run();
