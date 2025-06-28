@@ -1,4 +1,4 @@
--- Migration 003: Complete schema reset with email verification support
+-- Migration: Complete schema reset with email verification support
 -- This migration drops all existing data and recreates the schema from scratch
 -- Safe to run since there are no production users yet
 
@@ -10,6 +10,7 @@
 -- Drop all existing tables and indexes
 DROP TABLE IF EXISTS subscribers;
 DROP TABLE IF EXISTS version_sync_log;
+DROP TABLE IF EXISTS email_verification_queue_log;
 
 -- Remove any existing indexes (they'll be dropped with tables, but being explicit)
 DROP INDEX IF EXISTS idx_email;
@@ -147,51 +148,6 @@ BEGIN
 END;
 
 -- ========================================
--- Insert sample data for testing (optional)
--- Comment out for production deployment
--- ========================================
-
--- Uncomment the following lines if you want sample data for testing
-
-/*
--- Sample verified subscriber (grandfathered user)
-INSERT INTO subscribers (
-    email,
-    subscribed_at,
-    email_verified,
-    verified_at,
-    ip_address,
-    country
-) VALUES (
-    'existing.user@example.com',
-    '2024-01-01T00:00:00Z',
-    TRUE,
-    '2024-01-01T00:00:00Z',
-    '192.168.1.1',
-    'GB'
-);
-
--- Sample unverified subscriber (pending verification)
-INSERT INTO subscribers (
-    email,
-    subscribed_at,
-    email_verified,
-    verification_token,
-    verification_sent_at,
-    ip_address,
-    country
-) VALUES (
-    'pending.verification@example.com',
-    datetime('now'),
-    FALSE,
-    'dGVzdC12ZXJpZmljYXRpb24tdG9rZW4=', -- base64url encoded test token
-    datetime('now'),
-    '192.168.1.2',
-    'US'
-);
-*/
-
--- ========================================
 -- Verification of schema creation
 -- ========================================
 
@@ -215,7 +171,7 @@ INSERT INTO version_sync_log (
     'system@migration',
     'schema_reset',
     'v1',
-    '{"migration": "003_reset_schema.sql", "timestamp": "' || datetime('now') || '", "tables_created": ["subscribers", "version_sync_log", "email_verification_queue_log"], "triggers_created": 3}',
+    '{"migration": "reset_schema.sql", "timestamp": "' || datetime('now') || '", "tables_created": ["subscribers", "version_sync_log", "email_verification_queue_log"], "triggers_created": 3}',
     'completed'
 );
 

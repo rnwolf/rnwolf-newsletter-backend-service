@@ -28,6 +28,7 @@ SKIP_TESTS=false
 FORCE_DEPLOY=false
 CLEANUP_ONLY=false
 RUN_SMOKE_TESTS=true
+PRE_MIGRATION_BOOKMARK="" # Variable to store D1 time-travel bookmark
 
 # Function to print colored output
 print_status() {
@@ -130,59 +131,20 @@ parse_args() {
     fi
 }
 
+# Function to set all Cloudflare Worker secrets for the environment
+setup_secrets() {
+    print_step "Setting Cloudflare Worker secrets for $ENVIRONMENT environment..."
 
-# Function to set Grafana API key based on environment
-setup_grafana_credentials() {
-    local grafana_key=""
-
-    # Determine which Grafana API key to use based on environment
-    case "$ENVIRONMENT" in
-        local)
-            grafana_key="$GRAFANA_API_KEY"
-            if [[ -z "$grafana_key" ]]; then
-                print_error "GRAFANA_API_KEY environment variable not set for local environment"
-                print_status "Please set: export GRAFANA_API_KEY=your_local_grafana_api_key"
-                exit 1
-            fi
-            ;;
-        staging)
-            grafana_key="$GRAFANA_API_KEY_STAGING"
-            if [[ -z "$grafana_key" ]]; then
-                print_error "GRAFANA_API_KEY_STAGING environment variable not set"
-                print_status "Please set: export GRAFANA_API_KEY_STAGING=your_staging_grafana_api_key"
-                exit 1
-            fi
-            ;;
-        production)
-            grafana_key="$GRAFANA_API_KEY_PRODUCTION"
-            if [[ -z "$grafana_key" ]]; then
-                print_error "GRAFANA_API_KEY_PRODUCTION environment variable not set"
-                print_status "Please set: export GRAFANA_API_KEY_PRODUCTION=your_production_grafana_api_key"
-                exit 1
-            fi
-            ;;
-        *)
-            print_error "Unknown environment: $ENVIRONMENT"
-            exit 1
-            ;;
-    esac
-
-    print_status "Setting Grafana API key for $ENVIRONMENT environment..."
-    echo "$grafana_key" | npx wrangler secret put GRAFANA_API_KEY --env "$ENVIRONMENT"
-
-    if [[ $? -eq 0 ]]; then
-        print_success "Grafana API key set successfully for $ENVIRONMENT"
-    else
-        print_error "Failed to set Grafana API key for $ENVIRONMENT"
+    # This npm script loads secrets from the appropriate .env file and puts them
+    # into the Cloudflare Worker environment using wrangler secret put.
+    if ! npm run "secrets:$ENVIRONMENT"; then
+        print_error "Failed to set secrets for $ENVIRONMENT environment."
+        print_status "Ensure all required secrets are defined in .env.$ENVIRONMENT and your Cloudflare API token is configured."
         exit 1
+    else
+        print_success "Secrets set successfully for $ENVIRONMENT"
     fi
 }
-
-# Load environment variables from .env file if it exists
-if [[ -f "$PROJECT_DIR/.env" ]]; then
-    print_status "Loading environment variables from .env file..."
-    export $(cat "$PROJECT_DIR/.env" | grep -v '^#' | xargs)
-fi
 
 # Function to check prerequisites
 check_prerequisites() {
@@ -316,12 +278,45 @@ EOF
     print_success "Backup created at $backup_dir"
 }
 
+# Function to create a D1 time-travel bookmark before migration
+create_d1_bookmark() {
+    local env=$1
+    # Only run for remote environments where time-travel is most useful
+    if [[ "$env" != "staging" && "$env" != "production" ]]; then
+        print_status "Skipping D1 time-travel bookmark for local environment."
+        return
+    fi
+
+    print_step "Creating D1 time-travel bookmark for $env..."
+
+    # Get the current bookmark
+    local bookmark_info
+    bookmark_info=$(npx wrangler d1 time-travel info DB --env "$env" --remote)
+
+    if [[ $? -ne 0 ]]; then
+        print_warning "Could not retrieve D1 time-travel info. Skipping bookmark creation."
+        return
+    fi
+
+    # Extract the bookmark ID using grep and cut
+    PRE_MIGRATION_BOOKMARK=$(echo "$bookmark_info" | grep "current bookmark is" | cut -d"'" -f2)
+
+    if [[ -n "$PRE_MIGRATION_BOOKMARK" ]]; then
+        print_success "D1 time-travel bookmark saved: $PRE_MIGRATION_BOOKMARK"
+    else
+        print_warning "Failed to extract D1 time-travel bookmark."
+    fi
+}
+
 # Function to deploy to environment
 deploy_to_environment() {
     print_step "Deploying to $ENVIRONMENT environment..."
 
-    # Run database migrations first
-    print_status "Running database migrations..."
+    # Create a D1 time-travel bookmark before running migrations
+    create_d1_bookmark "$ENVIRONMENT"
+
+    # Run database migrations
+    print_status "Running database migrations for $ENVIRONMENT..."
     if ! npm run "db:migrate:$ENVIRONMENT"; then
         print_error "Database migration failed"
         exit 1
@@ -498,6 +493,14 @@ EOF
 handle_rollback() {
     print_error "Deployment failed. Would you like to rollback?"
 
+    # If a D1 time-travel bookmark was created, suggest restoring it
+    if [[ -n "$PRE_MIGRATION_BOOKMARK" ]]; then
+        print_warning "A database migration may have failed."
+        print_status "A D1 time-travel bookmark was created before the migration: ${YELLOW}$PRE_MIGRATION_BOOKMARK${NC}"
+        print_status "To restore the database to its pre-migration state, run:"
+        echo -e "${CYAN}npx wrangler d1 time-travel restore DB --env \"$ENVIRONMENT\" --remote --bookmark=\"$PRE_MIGRATION_BOOKMARK\"${NC}"
+    fi
+
     if [[ "$FORCE_DEPLOY" != true ]]; then
         read -p "Rollback to previous version? (y/N): " -r
         if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -555,22 +558,7 @@ test_metrics_endpoint() {
         return 1
     fi
 
-    # Get the appropriate Grafana API key for the environment
-    local grafana_key=""
-    case "$ENVIRONMENT" in
-        staging)
-            grafana_key="$GRAFANA_API_KEY_STAGING"
-            ;;
-        production)
-            grafana_key="$GRAFANA_API_KEY_PRODUCTION"
-            ;;
-        *)
-            print_error "Unknown environment for metrics test: $ENVIRONMENT"
-            return 1
-            ;;
-    esac
-
-    if [[ -z "$grafana_key" ]]; then
+    if [[ -z "$GRAFANA_API_KEY" ]]; then
         print_warning "No Grafana API key available for $ENVIRONMENT environment"
         print_status "Skipping metrics endpoint test"
         return 0
@@ -584,7 +572,7 @@ test_metrics_endpoint() {
 
     # Test the main metrics endpoint that Grafana will use
     response=$(curl -s -w "\n%{http_code}" \
-        -H "Authorization: Bearer $grafana_key" \
+        -H "Authorization: Bearer $GRAFANA_API_KEY" \
         "$api_url/metrics" \
         --max-time 30 \
         --connect-timeout 10)
@@ -634,7 +622,7 @@ test_metrics_endpoint() {
     print_status "Testing metrics health endpoint: $api_url/metrics/health"
 
     response=$(curl -s -w "\n%{http_code}" \
-        -H "Authorization: Bearer $grafana_key" \
+        -H "Authorization: Bearer $GRAFANA_API_KEY" \
         "$api_url/metrics/health" \
         --max-time 30 \
         --connect-timeout 10)
@@ -681,6 +669,20 @@ main() {
     # Change to project directory
     cd "$PROJECT_DIR"
 
+    # Load environment variables from the correct .env.<environment> file
+    if [[ -n "$ENVIRONMENT" ]]; then
+        local env_file="$PROJECT_DIR/.env.$ENVIRONMENT"
+        if [[ -f "$env_file" ]]; then
+            print_status "Loading environment variables from $env_file..."
+            export $(cat "$env_file" | grep -v '^#' | xargs)
+        else
+            print_warning "Environment file not found: $env_file. Relying on exported variables."
+        fi
+    else
+        # For cleanup-only mode without an environment
+        print_status "No environment specified, relying on exported variables."
+    fi
+
     # Handle cleanup-only mode
     if [[ "$CLEANUP_ONLY" == true ]]; then
         print_step "Running cleanup-only mode..."
@@ -704,7 +706,7 @@ main() {
 
     # Execute deployment steps
     check_prerequisites
-    setup_grafana_credentials
+    setup_secrets
     verify_environment_config
     run_tests
     backup_current_deployment

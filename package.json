@@ -8,31 +8,33 @@
     "test": "tests"
   },
   "scripts": {
+    "dev": "dotenv -e .env.local -- wrangler dev --config wrangler.jsonc --env local",
+    "dev:staging": "dotenv -e .env.staging -- wrangler dev --config wrangler.jsonc --env staging",
 
-    "dev": "wrangler dev --env local",
-    "dev:staging": "wrangler dev --env staging",
-    "dev:remote": "wrangler dev --env local --remote",
-    "secrets:staging": "dotenv -e .env.staging -- sh -c 'echo \"$HMAC_SECRET_KEY\" | npx wrangler secret put HMAC_SECRET_KEY --env staging && echo \"$TURNSTILE_SECRET_KEY\" | npx wrangler secret put TURNSTILE_SECRET_KEY --env staging && echo \"$GRAFANA_API_KEY\" | npx wrangler secret put GRAFANA_API_KEY --env staging && echo \"$MAILCHANNEL_API_KEY\" | npx wrangler secret put MAILCHANNEL_API_KEY --env staging && echo \"$SENDER_EMAIL\" | npx wrangler secret put SENDER_EMAIL --env staging && echo \"$SENDER_NAME\" | npx wrangler secret put SENDER_NAME --env staging && echo \"$MAILCHANNEL_AUTH_ID\" | npx wrangler secret put MAILCHANNEL_AUTH_ID --env staging'",
-    "secrets:production": "dotenv -e .env.production -- sh -c 'echo \"$HMAC_SECRET_KEY\" | npx wrangler secret put HMAC_SECRET_KEY --env production && echo \"$TURNSTILE_SECRET_KEY\" | npx wrangler secret put TURNSTILE_SECRET_KEY --env production && echo \"$GRAFANA_API_KEY\" | npx wrangler secret put GRAFANA_API_KEY --env production && echo \"$MAILCHANNEL_API_KEY\" | npx wrangler secret put MAILCHANNEL_API_KEY --env production && echo \"$SENDER_EMAIL\" | npx wrangler secret put SENDER_EMAIL --env production && echo \"$SENDER_NAME\" | npx wrangler secret put SENDER_NAME --env production && echo \"$MAILCHANNEL_AUTH_ID\" | npx wrangler secret put MAILCHANNEL_AUTH_ID --env production'",
+    "secrets:staging": "dotenv -e .env.staging -- sh -c 'echo \"$HMAC_SECRET_KEY\" | npx wrangler secret put HMAC_SECRET_KEY --config wrangler.jsonc --env staging && echo \"$TURNSTILE_SECRET_KEY\" | npx wrangler secret put TURNSTILE_SECRET_KEY --env staging && echo \"$GRAFANA_API_KEY\" | npx wrangler secret put GRAFANA_API_KEY --env staging && echo \"$MAILCHANNEL_API_KEY\" | npx wrangler secret put MAILCHANNEL_API_KEY --env staging && echo \"$SENDER_EMAIL\" | npx wrangler secret put SENDER_EMAIL --env staging && echo \"$SENDER_NAME\" | npx wrangler secret put SENDER_NAME --env staging && echo \"$MAILCHANNEL_AUTH_ID\" | npx wrangler secret put MAILCHANNEL_AUTH_ID --env staging'",
+    "secrets:production": "dotenv -e .env.production -- sh -c 'echo \"$HMAC_SECRET_KEY\" | npx wrangler secret put HMAC_SECRET_KEY --config wrangler.jsonc --env production && echo \"$TURNSTILE_SECRET_KEY\" | npx wrangler secret put TURNSTILE_SECRET_KEY --env production && echo \"$GRAFANA_API_KEY\" | npx wrangler secret put GRAFANA_API_KEY --env production && echo \"$MAILCHANNEL_API_KEY\" | npx wrangler secret put MAILCHANNEL_API_KEY --env production && echo \"$SENDER_EMAIL\" | npx wrangler secret put SENDER_EMAIL --env production && echo \"$SENDER_NAME\" | npx wrangler secret put SENDER_NAME --env production && echo \"$MAILCHANNEL_AUTH_ID\" | npx wrangler secret put MAILCHANNEL_AUTH_ID --env production'",
 
-    "deploy:staging": "dotenv -e .env.staging -- wrangler deploy --env staging",
-    "deploy:production": "dotenv -e .env.production -- wrangler deploy --env production",
-    "test": "vitest run --config vitest.config.local.ts",
-    "test:watch": "vitest --config vitest.config.ts",
+    "deploy:staging": "dotenv -e .env.staging -- wrangler deploy --config wrangler.jsonc --env staging",
+    "deploy:production": "dotenv -e .env.production -- wrangler deploy --config wrangler.jsonc --env production",
+
     "test:local": "dotenv -e .env.local -- vitest run --config vitest.config.local.ts",
     "test:staging": "dotenv -e .env.staging -- vitest run --config vitest.config.staging.ts",
     "test:production": "dotenv -e .env.production -- vitest run --config vitest.config.production.ts",
+
     "test:smoke:staging": "dotenv -e .env.staging -- vitest run tests/smoke-*.test.ts --config vitest.config.staging.ts",
     "test:smoke:production": "dotenv -e .env.production -- vitest run tests/smoke-*.test.ts --config vitest.config.production.ts",
     "test:unit": "vitest run tests/api.test.tstests/api.test.ts tests/unsubscribe.test.ts tests/email-verification.test.ts",
     "test:integration": "vitest run tests/integration.test.ts tests/email-verification-integration.test.ts",
     "test:queue": "vitest run tests/queue-processing.test.ts",
     "test:metrics": "vitest run tests/metrics.test.ts",
+
     "test:metrics:local": "TEST_ENV=local vitest run tests/metrics.test.ts",
     "test:metrics:staging": "TEST_ENV=staging vitest run tests/metrics.test.ts",
     "test:metrics:production": "TEST_ENV=production vitest run tests/metrics.test.ts",
+
     "validate:metrics": "./scripts/metrics-validation.sh production",
     "validate:metrics:staging": "./scripts/metrics-validation.sh staging",
+
     "test:staging:workers": "TEST_ENV=staging vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
     "test:production:workers": "TEST_ENV=production vitest run tests/api.test.ts tests/unsubscribe.test.ts tests/integration.test.ts",
     "test:health:staging": "curl -s https://api-staging.rnwolf.net/health | jq .",
@@ -42,34 +44,31 @@
     "test:performance:staging": "TEST_ENV=staging vitest run tests/performance.test.ts",
     "test:performance:production": "TEST_ENV=production vitest run tests/performance.test.ts --reporter=verbose",
     "test:load": "npm run test:performance",
+
     "metrics:local": "curl -H 'Authorization: Bearer local-test-key' http://localhost:8787/metrics/json",
     "metrics:staging": "curl -H 'Authorization: Bearer $GRAFANA_API_KEY' https://api-staging.rnwolf.net/metrics/json",
     "metrics:production": "curl -H 'Authorization: Bearer $GRAFANA_API_KEY' https://api.rnwolf.net/metrics/json",
+
     "test:email-verification:full": "vitest run tests/email-verification.test.ts tests/email-verification-integration.test.ts tests/queue-processing.test.ts",
     "test:email-verification:unit": "vitest run tests/email-verification.test.ts",
     "test:email-verification:integration": "vitest run tests/email-verification-integration.test.ts",
     "test:email-verification:queue": "vitest run tests/queue-processing.test.ts",
 
-    "db:migrate:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --file=./migrations/001_initial_schema.sql",
-    "db:migrate:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --env staging --remote --file=./migrations/001_initial_schema.sql",
-    "db:migrate:production": "dotenv -e .env.production -- wrangler d1 execute DB --env production --remote --file=./migrations/001_initial_schema.sql",
+    "db:reset:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --config wrangler.jsonc --file=./migrations/dev/reset_schema.sql",
+    "db:seed:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --config wrangler.jsonc --file=./migrations/dev/database_seed.sql",
+    "db:subscribers:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --config wrangler.jsonc --command \"SELECT * FROM subscribers ORDER BY updated_at ASC LIMIT 10;\"",
 
-    "db:migrate:verification:local": "wrangler d1 execute DB --env local --file=./migrations/002_add_email_verification.sql",
-    "db:migrate:verification:staging": "wrangler d1 execute DB --env staging --remote --file=./migrations/002_add_email_verification.sql",
-    "db:migrate:verification:production": "wrangler d1 execute DB --env production --remote --file=./migrations/002_add_email_verification.sql",
-    "db:migrate:all:local": "npm run db:migrate:local && npm run db:migrate:verification:local",
-    "db:migrate:all:staging": "npm run db:migrate:staging && npm run db:migrate:verification:staging",
-    "db:migrate:all:production": "npm run db:migrate:production && npm run db:migrate:verification:production",
-    "db:reset:local": "./scripts/apply-reset-migration.sh local",
-    "db:reset:staging": "./scripts/apply-reset-migration.sh staging",
-    "db:reset:production": "./scripts/apply-reset-migration.sh production",
-    "db:verify:local": "./scripts/verify-email-verification-schema.sh local",
-    "db:verify:staging": "./scripts/verify-email-verification-schema.sh staging",
-    "db:verify:production": "./scripts/verify-email-verification-schema.sh production",
-    "test:email-verification": "./scripts/run-email-verification-tdd.sh",
-    "test:email-verification:watch": "./scripts/run-email-verification-tdd.sh --watch",
-    "db:verify:schema": "./scripts/verify-schema.sh",
-    "test:verification": "vitest run tests/verification.test.ts",
+    "db:reset:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --config wrangler.jsonc --env staging --remote --file=./migrations/dev/reset_schema.sql",
+    "db:seed:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --config wrangler.jsonc --env staging --remote --file=./migrations/dev/database_seed.sql",
+    "db:subscribers:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --config wrangler.jsonc --env staging --remote --command \"SELECT * FROM subscribers ORDER BY updated_at ASC LIMIT 10;\"",
+
+    "db:reset:production": "dotenv -e .env.production -- wrangler d1 execute DB --config wrangler.jsonc --env production --remote --file=./migrations/dev/reset_schema.sql",
+    "db:subscribers:production": "dotenv -e .env.production -- wrangler d1 execute DB --config wrangler.jsonc --env production --remote --command \"SELECT * FROM subscribers ORDER BY updated_at ASC LIMIT 10;\"",
+
+    "db:migrate:local": "./scripts/apply-reset-migration.sh local",
+    "db:migrate:staging": "./scripts/apply-reset-migration.sh staging",
+    "db:migrate:production": "./scripts/apply-reset-migration.sh production",
+
     "type-check": "tsc --noEmit",
     "lint": "echo 'Add linting when ready'"
   },
@@ -93,6 +92,6 @@
     "dotenv-cli": "^8.0.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4",
-    "wrangler": "^4.20.1"
+    "wrangler": "^4.22.0"
   }
 }

@@ -42,22 +42,34 @@ PROJECT_DIR = SCRIPT_DIR.parent
 BACKUP_DIR = PROJECT_DIR / "backups" / "database"
 LOG_FILE = PROJECT_DIR / "db-backup-restore.log"
 
+console = Console()
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
+
 # Database configuration - IDs from environment variables or wrangler.jsonc
 def load_database_config():
     """Load database configuration from environment variables or wrangler.jsonc"""
     config = {
         "local": {
-            "id": os.getenv('LOCAL_DB_ID'),
+            "id": None, # Will be populated from wrangler.jsonc
             "name": "rnwolf-newsletter-db-local",
             "remote": False
         },
         "staging": {
-            "id": os.getenv('STAGING_DB_ID'),
+            "id": None, # Will be populated from wrangler.jsonc
             "name": "rnwolf-newsletter-db-staging",
             "remote": True
         },
         "production": {
-            "id": os.getenv('PRODUCTION_DB_ID'),
+            "id": None, # Will be populated from wrangler.jsonc
             "name": "rnwolf-newsletter-db-production",
             "remote": True
         }
@@ -73,8 +85,12 @@ def load_database_config():
             with open(wrangler_config_path, 'r') as f:
                 content = f.read()
 
+            # Normalize line endings to Unix style before processing
+            content = content.replace('\r\n', '\n').replace('\r', '\n')
+
             # Remove comments from JSONC
-            content = re.sub(r'//.*?\n', '\n', content)
+            # Use a negative lookbehind to avoid matching '//' in URLs like http://
+            content = re.sub(r'(?<!:)//.*?\n', '\n', content)
             content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
 
             wrangler_config = json.loads(content)
@@ -104,17 +120,7 @@ DATABASE_CONFIG = load_database_config()
 CLOUDFLARE_ACCOUNT_ID = os.getenv('CLOUDFLARE_ACCOUNT_ID')
 CLOUDFLARE_API_TOKEN = os.getenv('CLOUDFLARE_API_TOKEN')
 
-console = Console()
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
-    ]
-)
 
 class DatabaseBackupRestore:
     def __init__(self):
@@ -139,16 +145,9 @@ class DatabaseBackupRestore:
             for env in missing_configs:
                 self.console.print(f"  - {env}")
 
-            self.console.print("\n[yellow]💡 To fix this, set these environment variables:[/yellow]")
-            if "local" in missing_configs:
-                self.console.print("  export LOCAL_DB_ID='your_local_db_id'")
-            if "staging" in missing_configs:
-                self.console.print("  export STAGING_DB_ID='your_staging_db_id'")
-            if "production" in missing_configs:
-                self.console.print("  export PRODUCTION_DB_ID='your_production_db_id'")
-
-            self.console.print("\n[blue]📝 Or ensure your wrangler.jsonc file contains the database_id fields[/blue]")
-            self.console.print("You can find database IDs by running: npx wrangler d1 list")
+            self.console.print("\n[yellow]💡 To fix this, ensure your wrangler.jsonc file contains the 'database_id' for the 'DB' binding in each environment.[/yellow]")
+            self.console.print("  Example: [blue]\"d1_databases\": [ { \"binding\": \"DB\", \"database_name\": \"your-db-name\", \"database_id\": \"your-db-id\" } ][/blue]")
+            self.console.print("  You can find database IDs by running: [yellow]npx wrangler d1 list[/yellow]")
 
             raise click.ClickException("Database configuration incomplete")
 
@@ -303,18 +302,22 @@ class DatabaseBackupRestore:
             self.log(f"API fallback failed for {environment}: {e}", "error")
             return 0
 
-    def create_backup(self, environment: str, compression: bool = True, verify: bool = True) -> Optional[str]:
-        """Create database backup"""
+    def create_backup(
+        self,
+        environment: str,
+        compression: bool = True,
+        verify: bool = True,
+        progress: Progress = None,
+        task: Any = None
+    ) -> Optional[str]:
+        """Create database backup
+
+        If progress and task are provided, use them for progress updates instead of creating a new Progress spinner.
+        """
         backup_filename = self.generate_backup_filename(environment, compression=compression)
         backup_path = self.backup_dir / backup_filename
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=self.console
-        ) as progress:
-            task = progress.add_task(f"Creating backup for {environment}...", total=None)
-
+        def _do_backup(progress_obj, task_id):
             try:
                 # Get current subscriber count for verification
                 initial_count = self.get_subscriber_count(environment)
@@ -323,8 +326,8 @@ class DatabaseBackupRestore:
                 db_config = self.get_database_config(environment)
                 temp_file = self.backup_dir / f"temp_{environment}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
 
-                # Create backup header
                 with open(temp_file, 'w') as f:
+                    # Initial Backup Header
                     f.write(f"""-- Newsletter Database Backup
 -- Generated by db-backup-restore.py
 -- Timestamp: {datetime.now().isoformat()}
@@ -333,74 +336,89 @@ class DatabaseBackupRestore:
 -- Database Name: {db_config['name']}
 -- Subscriber Count: {initial_count}
 
--- Schema Creation
-CREATE TABLE IF NOT EXISTS subscribers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    subscribed_at DATETIME NOT NULL,
-    unsubscribed_at DATETIME NULL,
-    ip_address TEXT,
-    user_agent TEXT,
-    country TEXT,
-    city TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_email ON subscribers(email);
-CREATE INDEX IF NOT EXISTS idx_subscribed_at ON subscribers(subscribed_at);
-
--- Data Export
 """)
 
-                # Export data using wrangler
-                progress.update(task, description="Exporting subscriber data...")
+                    # Applied Migrations Section
+                    if progress_obj and task_id is not None:
+                        progress_obj.update(task_id, description="Fetching applied migrations...")
+                    # Query the d1_migrations table directly for applied migrations
+                    migrations_command = ["d1", "execute", "DB", "--env", environment]
+                    if db_config["remote"]:
+                        migrations_command.append("--remote")
+                    migrations_command.extend(["--command", "SELECT * FROM d1_migrations ORDER BY applied_at DESC;", "--json"])
 
-                # Build the SQL command to export data as INSERT statements
-                export_sql = """
-SELECT
-    'INSERT INTO subscribers (id, email, subscribed_at, unsubscribed_at, ip_address, user_agent, country, city, created_at, updated_at) VALUES (' ||
-    COALESCE(id, 'NULL') || ', ' ||
-    QUOTE(email) || ', ' ||
-    QUOTE(subscribed_at) || ', ' ||
-    COALESCE(QUOTE(unsubscribed_at), 'NULL') || ', ' ||
-    COALESCE(QUOTE(ip_address), 'NULL') || ', ' ||
-    COALESCE(QUOTE(user_agent), 'NULL') || ', ' ||
-    COALESCE(QUOTE(country), 'NULL') || ', ' ||
-    COALESCE(QUOTE(city), 'NULL') || ', ' ||
-    COALESCE(QUOTE(created_at), 'NULL') || ', ' ||
-    COALESCE(QUOTE(updated_at), 'NULL') || ');' as sql_statement
-FROM subscribers
-ORDER BY id;
-"""
+                    migrations_success, migrations_stdout, migrations_stderr = self.run_wrangler_command(migrations_command)
 
-                command = ["d1", "execute", "DB", "--env", environment]
-                if db_config["remote"]:
-                    command.append("--remote")
-                command.extend(["--command", export_sql])
+                    f.write("-- Applied Migrations (from d1_migrations table):\n\n")
+                    if migrations_success and migrations_stdout:
+                        try:
+                            # Wrangler --json output is an array of results, each with a 'results' key
+                            json_output = json.loads(migrations_stdout)
+                            applied_migrations = []
+                            if json_output and isinstance(json_output, list) and len(json_output) > 0:
+                                for result_set in json_output:
+                                    if 'results' in result_set and isinstance(result_set['results'], list):
+                                        applied_migrations.extend(result_set['results'])
 
-                success, stdout, stderr = self.run_wrangler_command(command)
+                            if applied_migrations:
+                                for mig in applied_migrations:
+                                    f.write(f"--   - ID: {mig.get('migration_id')}, Name: {mig.get('name')}, Applied At: {mig.get('applied_at')}\n")
+                            else:
+                                f.write("--   No migrations found in d1_migrations table.\n")
+                        except json.JSONDecodeError as e:
+                            f.write(f"--   Failed to parse migrations JSON output: {e}\n")
+                            self.log(f"Failed to parse migrations JSON output for {environment}: {e}. Raw output:\n{migrations_stdout}", "warning")
+                        except Exception as e:
+                            f.write(f"--   An unexpected error occurred while processing migrations: {e}\n")
+                            self.log(f"Unexpected error processing migrations for {environment}: {e}", "warning")
+                    else:
+                        f.write(f"--   Failed to retrieve migrations: {migrations_stderr.strip()}\n")
+                        self.log(f"Failed to fetch migrations list for {environment}: {migrations_stderr}", "warning")
+                    f.write("\n") # Newline after migrations section
 
-                if not success:
-                    self.log(f"Failed to export data from {environment}: {stderr}", "error")
-                    temp_file.unlink(missing_ok=True)
-                    return None
+                    # Full Database Dump Section (Schema and Data)
+                    if progress_obj and task_id is not None:
+                        progress_obj.update(task_id, description="Exporting full database dump...")
 
-                # Parse and clean the output
-                with open(temp_file, 'a') as f:
-                    lines = stdout.strip().split('\n')
-                    insert_count = 0
-                    for line in lines:
-                        line = line.strip()
-                        if line.startswith('INSERT INTO subscribers'):
-                            f.write(line + '\n')
-                            insert_count += 1
+                    # Use a temporary file for the wrangler export, as it requires a file path
+                    d1_dump_file = self.backup_dir / f"d1_dump_{environment}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+
+                    export_command = ["d1", "export", "DB", "--env", environment, "--output", str(d1_dump_file)]
+                    if db_config["remote"]:
+                        export_command.append("--remote")
+
+                    export_success, export_stdout, export_stderr = self.run_wrangler_command(export_command)
+
+                    f.write("-- Full Database Dump (Schema and Data)\n")
+                    f.write(f"-- Generated by 'wrangler d1 export' at {datetime.now().isoformat()}\n\n")
+
+                    if export_success and d1_dump_file.exists():
+                        try:
+                            with open(d1_dump_file, 'r') as dump_f:
+                                dump_content = dump_f.read()
+                            f.write(dump_content.strip())
+                            self.log(f"Successfully exported full dump from {environment}")
+                        except Exception as e:
+                            error_message = f"Could not read D1 dump file: {e}"
+                            f.write(f"-- Failed to read dump file: {error_message}\n")
+                            self.log(f"Failed to read D1 dump file for {environment}: {e}", "error")
+                        finally:
+                            d1_dump_file.unlink(missing_ok=True)  # Clean up temp dump file
+                    else:
+                        error_message = export_stderr.strip()
+                        if not error_message and not export_success:
+                            error_message = f"Command failed with no stderr. stdout: {export_stdout.strip()[:500]}..." if export_stdout else "Command failed with no stderr or stdout."
+                        f.write(f"-- Failed to export full database dump: {error_message}\n")
+                        self.log(f"Failed to export full dump from {environment}: {export_stderr}", "error")
+                        # Fail the backup if the core dump fails
+                        raise click.ClickException(f"Wrangler d1 export failed for {environment}")
 
                     f.write(f"\n-- Backup completed at {datetime.now().isoformat()}\n")
-                    f.write(f"-- Total records exported: {insert_count}\n")
+                    f.write(f"-- Total records exported: (see full dump above)\n")
 
                 # Compress if requested
-                progress.update(task, description="Compressing backup...")
+                if progress_obj and task_id is not None:
+                    progress_obj.update(task_id, description="Compressing backup...")
                 if compression:
                     with open(temp_file, 'rb') as f_in:
                         with gzip.open(backup_path, 'wb') as f_out:
@@ -411,7 +429,8 @@ ORDER BY id;
 
                 # Verify backup
                 if verify:
-                    progress.update(task, description="Verifying backup...")
+                    if progress_obj and task_id is not None:
+                        progress_obj.update(task_id, description="Verifying backup...")
                     if not self.verify_backup(backup_filename):
                         self.log("Backup verification failed", "error")
                         backup_path.unlink(missing_ok=True)
@@ -425,6 +444,19 @@ ORDER BY id;
             except Exception as e:
                 self.log(f"Backup creation failed for {environment}: {e}", "error")
                 return None
+
+        # If called with an existing progress/task, use them
+        if progress is not None and task is not None:
+            return _do_backup(progress, task)
+        # Otherwise, create our own progress spinner
+        else:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=self.console
+            ) as progress_obj:
+                task_id = progress_obj.add_task(f"Creating backup for {environment}...", total=None)
+                return _do_backup(progress_obj, task_id)
 
     def verify_backup(self, backup_filename: str) -> bool:
         """Verify backup file integrity"""
@@ -471,7 +503,7 @@ ORDER BY id;
                 # Create safety backup
                 if create_safety_backup:
                     task = progress.add_task("Creating safety backup...", total=None)
-                    safety_backup = self.create_backup(environment, compression=True, verify=False)
+                    safety_backup = self.create_backup(environment, compression=True, verify=False, progress=progress, task=task)
                     if safety_backup:
                         self.console.print(f"[green]Safety backup created: {safety_backup}[/green]")
                     else:
@@ -488,18 +520,30 @@ ORDER BY id;
                 else:
                     shutil.copy2(backup_path, temp_sql)
 
-                # Clear existing data
-                progress.update(task, description="Clearing existing data...")
+                # Clear existing data by dropping all user tables before restore
+                progress.update(task, description="Dropping existing tables...")
                 db_config = self.get_database_config(environment)
-
-                clear_command = ["d1", "execute", "DB", "--env", environment]
-                if db_config["remote"]:
-                    clear_command.append("--remote")
-                clear_command.extend(["--command", "DELETE FROM subscribers;"])
-
-                success, stdout, stderr = self.run_wrangler_command(clear_command)
-                if not success:
-                    self.log(f"Warning: Failed to clear existing data in {environment}: {stderr}", "warning")
+                drop_tables_sql = """
+                SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';
+                """
+                # Get table names
+                result = self.query_d1_database(drop_tables_sql, environment)
+                if result and result.get('success'):
+                    tables = []
+                    results = result.get('result', [])
+                    if results and len(results) > 0:
+                        rows = results[0].get('results', [])
+                        for row in rows:
+                            table_name = row.get('name')
+                            if table_name:
+                                tables.append(table_name)
+                    # Drop each table
+                    for table in tables:
+                        drop_cmd = ["d1", "execute", "DB", "--env", environment]
+                        if db_config["remote"]:
+                            drop_cmd.append("--remote")
+                        drop_cmd.extend(["--command", f"DROP TABLE IF EXISTS {table};"])
+                        self.run_wrangler_command(drop_cmd)
 
                 # Restore data
                 progress.update(task, description="Restoring data from backup...")
@@ -637,6 +681,84 @@ def cli(verbose):
     """Newsletter Database Backup and Restore Utility"""
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+
+@cli.group()
+def timetravel():
+    """Commands for D1 Time Travel."""
+    pass
+
+@timetravel.command(name="info")
+@click.argument('environment', type=click.Choice(['local', 'staging', 'production']))
+def timetravel_info(environment):
+    """Get D1 Time Travel info for an environment."""
+    db_util = DatabaseBackupRestore()
+    db_config = db_util.get_database_config(environment)
+
+    if not db_config["remote"]:
+        rprint(f"[yellow]Time Travel is only available for remote databases. '{environment}' is local.[/yellow]")
+        return
+
+    rprint(Panel.fit(
+        f"[bold blue]Getting Time Travel info for {environment}[/bold blue]",
+        border_style="blue"
+    ))
+
+    command = ["d1", "time-travel", "info", "DB", "--env", environment]
+    success, stdout, stderr = db_util.run_wrangler_command(command)
+
+    if success:
+        rprint("[green]Time Travel Info:[/green]")
+        rprint(f"[cyan]{stdout}[/cyan]")
+    else:
+        rprint("[red]❌ Failed to get Time Travel info:[/red]")
+        rprint(f"[dim]{stderr}[/dim]")
+        sys.exit(1)
+
+@timetravel.command(name="restore")
+@click.argument('environment', type=click.Choice(['staging', 'production']))
+@click.option('--bookmark', help='The bookmark ID to restore to. Mutually exclusive with --timestamp.')
+@click.option('--timestamp', help='A UNIX timestamp or JavaScript date-time string. Mutually exclusive with --bookmark.')
+@click.option('--force', is_flag=True, help='Force restore without confirmation.')
+def timetravel_restore(environment, bookmark, timestamp, force):
+    """Restore a D1 database to a specific point-in-time."""
+    db_util = DatabaseBackupRestore()
+
+    if bookmark and timestamp:
+        rprint("[red]❌ Error: Cannot specify both --bookmark and --timestamp. Choose one.[/red]")
+        sys.exit(1)
+    if not bookmark and not timestamp:
+        rprint("[red]❌ Error: Either --bookmark or --timestamp must be specified.[/red]")
+        sys.exit(1)
+
+    restore_target = f"bookmark {bookmark}" if bookmark else f"timestamp {timestamp}"
+
+    if not force:
+        warning_text = f"⚠️  This will restore the {environment} database to {restore_target}!"
+        if not Confirm.ask(f"[red]{warning_text}[/red]\nThis action is irreversible. Continue?"):
+            rprint("[yellow]Restore cancelled[/yellow]")
+            sys.exit(0)
+
+    rprint(Panel.fit(
+        f"[bold red]Restoring {environment} database to {restore_target}[/bold red]",
+        border_style="red"
+    ))
+
+    restore_arg = ""
+    if bookmark:
+        restore_arg = f"--bookmark={bookmark}"
+    else: # timestamp
+        restore_arg = f"--timestamp={timestamp}"
+
+    command = ["d1", "time-travel", "restore", "DB", "--env", environment, restore_arg]
+    success, stdout, stderr = db_util.run_wrangler_command(command)
+
+    if success:
+        rprint("[green]✅ Database restore from bookmark completed successfully.[/green]")
+        rprint(f"[cyan]{stdout}[/cyan]")
+    else:
+        rprint("[red]❌ Database restore from bookmark failed:[/red]")
+        rprint(f"[dim]{stderr}[/dim]")
+        sys.exit(1)
 
 @cli.command()
 @click.argument('environment', type=click.Choice(['local', 'staging', 'production']))
@@ -893,10 +1015,7 @@ def config():
     rprint("\n[bold yellow]Environment Variables:[/bold yellow]")
     env_vars = [
         ("CLOUDFLARE_ACCOUNT_ID", CLOUDFLARE_ACCOUNT_ID),
-        ("CLOUDFLARE_API_TOKEN", "***" if CLOUDFLARE_API_TOKEN else None),
-        ("LOCAL_DB_ID", os.getenv('LOCAL_DB_ID')),
-        ("STAGING_DB_ID", os.getenv('STAGING_DB_ID')),
-        ("PRODUCTION_DB_ID", os.getenv('PRODUCTION_DB_ID'))
+        ("CLOUDFLARE_API_TOKEN", "***" if CLOUDFLARE_API_TOKEN else None)
     ]
 
     for var_name, var_value in env_vars:
@@ -1007,31 +1126,6 @@ def debug_wrangler(environment):
         rprint(f"[red]❌ Debug failed: {e}[/red]")
         import traceback
         rprint(f"[red]{traceback.format_exc()}[/red]")
-    """Test database connection for an environment"""
-    db_util = DatabaseBackupRestore()
-
-    rprint(f"[blue]Testing connection to {environment} database...[/blue]")
-
-    try:
-        # Test basic connection
-        count = db_util.get_subscriber_count(environment)
-
-        if count >= 0:
-            rprint(f"[green]✅ Connection successful![/green]")
-            rprint(f"[blue]📊 Current subscriber count: {count}[/blue]")
-
-            # Show database info
-            db_config = db_util.get_database_config(environment)
-            rprint(f"[yellow]🗄️ Database ID: {db_config['id']}[/yellow]")
-            rprint(f"[yellow]🏷️ Database Name: {db_config['name']}[/yellow]")
-            rprint(f"[yellow]🌐 Remote: {'Yes' if db_config['remote'] else 'No'}[/yellow]")
-        else:
-            rprint("[red]❌ Connection failed or returned invalid count[/red]")
-            sys.exit(1)
-
-    except Exception as e:
-        rprint(f"[red]❌ Connection test failed: {e}[/red]")
-        sys.exit(1)
 
 
 if __name__ == "__main__":

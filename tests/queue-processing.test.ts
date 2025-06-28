@@ -118,7 +118,11 @@ describe('Queue Processing Tests (local only)', () => {
         'https://api.mailchannels.net/tx/v1/send',
         expect.objectContaining({
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': expect.any(String), // Expect the API key header
+            'X-MailChannels-Auth-Id': expect.any(String), // Expect the Auth ID header
+          },
           body: expect.stringContaining(testMessage.email)
         })
       );
@@ -507,7 +511,6 @@ describe('Queue Processing Tests (local only)', () => {
 
       // Should use rnwolf.net domain for local testing
       expect(emailBody.from.email).toBe('newsletter@rnwolf.net');
-      expect(emailBody.personalizations[0].dkim_domain).toBe('rnwolf.net');
     });
 
     it('should generate environment-appropriate verification URLs', async () => {

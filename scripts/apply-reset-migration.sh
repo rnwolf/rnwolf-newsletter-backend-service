@@ -33,7 +33,7 @@ case $ENVIRONMENT in
 esac
 
 # Migration file path
-MIGRATION_FILE="migrations/003_reset_schema.sql"
+MIGRATION_FILE="migrations/dev/reset_schema.sql"
 
 # Check if migration file exists
 if [ ! -f "$MIGRATION_FILE" ]; then
