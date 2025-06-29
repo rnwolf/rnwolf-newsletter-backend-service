@@ -1,5 +1,16 @@
 // src/email-verification-worker.ts
 // Queue consumer for sending verification emails
+
+// Helper function to mask email addresses for logging (PII protection)
+function maskEmailForLogging(email: string): string {
+  if (!email || !email.includes('@')) {
+    return 'invalid-email';
+  }
+  const [localPart, domain] = email.split('@');
+  const maskedLocal = localPart.length > 3 ? localPart.substring(0, 3) + '***' : '***';
+  return `${maskedLocal}@${domain}`;
+}
+
 export interface EmailVerificationMessage {
   email: string;
   verificationToken: string;
@@ -42,7 +53,7 @@ export default {
 async function processVerificationEmail(data: EmailVerificationMessage, env: Env): Promise<void> {
   const { email, verificationToken, subscribedAt, metadata } = data;
 
-  console.log(`Sending verification email to: ${email}`);
+  console.log(`Sending verification email to: ${maskEmailForLogging(email)}`);
 
   // Generate verification URL
   const verificationUrl = `https://api.rnwolf.net/v1/newsletter/verify?token=${verificationToken}&email=${encodeURIComponent(email)}`;
@@ -54,7 +65,7 @@ async function processVerificationEmail(data: EmailVerificationMessage, env: Env
     // Send email using MailChannels (or your preferred email service)
     await sendVerificationEmail(email, emailContent, env);
 
-    console.log(`Verification email sent successfully to: ${email}`);
+    console.log(`Verification email sent successfully to: ${maskEmailForLogging(email)}`);
 
     // Optional: Update database to track email sent
     await env.DB.prepare(`
@@ -202,7 +213,7 @@ async function sendVerificationEmail(email: string, content: { subject: string; 
   const isTestEmail = testEmailDomains.some(domain => email.endsWith(domain));
   
   if (isTestEmail) {
-    console.log(`[TEST_EMAIL_SKIP] Skipping actual email send for test email: ${email} (environment: ${env.ENVIRONMENT})`);
+    console.log(`[TEST_EMAIL_SKIP] Skipping actual email send for test email: ${maskEmailForLogging(email)} (environment: ${env.ENVIRONMENT})`);
     
     // In staging/local environments, don't send emails to test domains
     if (env.ENVIRONMENT !== 'production') {

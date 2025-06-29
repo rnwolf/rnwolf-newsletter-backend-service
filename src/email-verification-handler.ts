@@ -1,6 +1,16 @@
 // src/email-verification-handler.ts
 // Handle email verification confirmation clicks
 
+// Helper function to mask email addresses for logging (PII protection)
+function maskEmailForLogging(email: string): string {
+  if (!email || !email.includes('@')) {
+    return 'invalid-email';
+  }
+  const [localPart, domain] = email.split('@');
+  const maskedLocal = localPart.length > 3 ? localPart.substring(0, 3) + '***' : '***';
+  return `${maskedLocal}@${domain}`;
+}
+
 interface Env {
   DB: D1Database;
   HMAC_SECRET_KEY: string;
@@ -31,7 +41,7 @@ export async function handleEmailVerification(request: Request, env: Env): Promi
     const token = url.searchParams.get('token');
     const email = url.searchParams.get('email');
 
-    console.log('Verification request:', { hasToken: !!token, email });
+    console.log('Verification request:', { hasToken: !!token, email: email ? maskEmailForLogging(email) : 'undefined' });
 
     // Validate parameters
     if (!token || !email || token.trim() === '' || email.trim() === '') {
@@ -92,7 +102,7 @@ export async function handleEmailVerification(request: Request, env: Env): Promi
       WHERE email = ?
     `).bind(now, email).run();
 
-    console.log('Email verified successfully:', email);
+    console.log('Email verified successfully:', maskEmailForLogging(email));
 
     return generateSuccessResponse(email, false);
 

@@ -162,12 +162,50 @@ verify_migration() {
         echo -e "${YELLOW}!${NC} Some indexes may be missing"
     fi
 
-    # Check triggers (simplified)
+    # Check triggers
     echo "Checking triggers..."
-    if npx wrangler d1 execute DB --env "$env" $remote_flag --command="SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='subscribers';" 2>/dev/null | grep -q "trigger"; then
-        echo -e "${GREEN}✓${NC} Triggers created"
+    
+    # Get trigger count from JSON output (extract only JSON part)
+    trigger_output=$(npx wrangler d1 execute DB --env "$env" $remote_flag --command="SELECT COUNT(*) as count FROM sqlite_master WHERE type='trigger' AND tbl_name='subscribers';" 2>/dev/null | grep -A 1000 '^\[' | head -n 1000)
+    
+    # Use jq for reliable JSON parsing, with fallback
+    if command -v jq &> /dev/null && [[ -n "$trigger_output" ]]; then
+        trigger_count=$(echo "$trigger_output" | jq -r '.[0].results[0].count // 0' 2>/dev/null)
     else
-        echo -e "${YELLOW}!${NC} Some triggers may be missing"
+        # Fallback: try to extract any number from the JSON results section
+        trigger_count=$(echo "$trigger_output" | tr -d '\n' | grep -o '"count":[0-9]*' | grep -o '[0-9]*' | head -1)
+        if [[ -z "$trigger_count" ]]; then
+            trigger_count=0
+        fi
+    fi
+    
+    # Default to 0 if still empty
+    if [[ -z "$trigger_count" ]]; then
+        trigger_count=0
+    fi
+    
+    if [[ "$trigger_count" -ge 3 ]]; then
+        echo -e "${GREEN}✓${NC} Triggers created ($trigger_count found)"
+        # List the triggers for verification
+        echo "  Found triggers:"
+        trigger_names=$(npx wrangler d1 execute DB --env "$env" $remote_flag --command="SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='subscribers';" 2>/dev/null | grep -A 1000 '^\[' | head -n 1000)
+        if command -v jq &> /dev/null && [[ -n "$trigger_names" ]]; then
+            echo "$trigger_names" | jq -r '.[0].results[].name' 2>/dev/null | sed 's/^/    - /'
+        else
+            echo "$trigger_names" | tr -d '\n' | grep -o '"name":"[^"]*"' | sed 's/"name":"//g' | sed 's/"//g' | sed 's/^/    - /'
+        fi
+    else
+        echo -e "${YELLOW}!${NC} Some triggers may be missing (found: $trigger_count, expected: 3)"
+        echo "  Expected triggers: update_subscribers_timestamp, check_verification_consistency, clear_verification_token_on_verify"
+        if [[ "$trigger_count" -gt 0 ]]; then
+            echo "  Found triggers:"
+            trigger_names=$(npx wrangler d1 execute DB --env "$env" $remote_flag --command="SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='subscribers';" 2>/dev/null | grep -A 1000 '^\[' | head -n 1000)
+            if command -v jq &> /dev/null && [[ -n "$trigger_names" ]]; then
+                echo "$trigger_names" | jq -r '.[0].results[].name' 2>/dev/null | sed 's/^/    - /'
+            else
+                echo "$trigger_names" | tr -d '\n' | grep -o '"name":"[^"]*"' | sed 's/"name":"//g' | sed 's/"//g' | sed 's/^/    - /'
+            fi
+        fi
     fi
 
     # Check migration log (simplified)
@@ -207,31 +245,6 @@ run_post_migration_tests() {
     fi
 }
 
-# Function to provide next steps
-show_next_steps() {
-    echo ""
-    echo -e "${BLUE}📝 Next Steps${NC}"
-    echo -e "${BLUE}============${NC}"
-    echo ""
-    echo "1. Run the TDD test suite to verify email verification implementation:"
-    echo -e "   ${YELLOW}./scripts/run-email-verification-tdd.sh${NC}"
-    echo ""
-    echo "2. Update your subscription handler implementation to:"
-    echo "   • Store subscribers as unverified (email_verified = FALSE)"
-    echo "   • Generate verification tokens"
-    echo "   • Queue verification emails"
-    echo "   • Return verification message instead of subscription confirmation"
-    echo ""
-    echo "3. Implement the email verification endpoint:"
-    echo -e "   ${YELLOW}/v1/newsletter/verify?token=...&email=...${NC}"
-    echo ""
-    echo "4. If migrating other environments, run:"
-    echo -e "   ${YELLOW}./scripts/apply-reset-migration.sh staging${NC}"
-    echo -e "   ${YELLOW}./scripts/apply-reset-migration.sh production${NC}"
-    echo ""
-    echo "5. Deploy the updated worker code with verification functionality"
-}
-
 # Main execution
 main() {
     check_wrangler
@@ -265,7 +278,6 @@ main() {
     echo ""
     echo -e "${GREEN}🎉 Migration completed successfully!${NC}"
 
-    show_next_steps
 }
 
 # Run main function

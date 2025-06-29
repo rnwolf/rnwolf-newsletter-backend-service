@@ -37,7 +37,7 @@ interface SubscriptionData {
 // Helper function to generate a verification token
 function generateVerificationToken(email: string, secretKey: string): string {
   console.log('generateVerificationToken called with:', {
-    email,
+    email: maskEmailForLogging(email),
     secretKey: secretKey ? `${secretKey.substring(0, 8)}...` : 'undefined',
     secretKeyType: typeof secretKey
   });
@@ -52,6 +52,16 @@ function generateVerificationToken(email: string, secretKey: string): string {
 // Helper function to generate request ID
 function generateRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+}
+
+// Helper function to mask email addresses for logging (PII protection)
+function maskEmailForLogging(email: string): string {
+  if (!email || !email.includes('@')) {
+    return 'invalid-email';
+  }
+  const [localPart, domain] = email.split('@');
+  const maskedLocal = localPart.length > 3 ? localPart.substring(0, 3) + '***' : '***';
+  return `${maskedLocal}@${domain}`;
 }
 
 // Helper function to normalize email addresses
@@ -115,7 +125,7 @@ async function handleSubscriptionInDatabase(
   const now = new Date().toISOString();
 
   console.log('About to call generateVerificationToken with:', {
-    email,
+    email: maskEmailForLogging(email),
     secretKey: env.HMAC_SECRET_KEY ? `${env.HMAC_SECRET_KEY.substring(0, 8)}...` : 'undefined',
     secretKeyType: typeof env.HMAC_SECRET_KEY
   });
@@ -130,7 +140,7 @@ async function handleSubscriptionInDatabase(
 
     if (!existingSubscriber) {
       // Scenario 1: Brand new subscriber
-      console.log(`New subscriber: ${email}`);
+      console.log(`New subscriber: ${maskEmailForLogging(email)}`);
 
       await env.DB.prepare(`
         INSERT INTO subscribers (
@@ -155,11 +165,11 @@ async function handleSubscriptionInDatabase(
       const isCurrentlyUnsubscribed = existingSubscriber.unsubscribed_at !== null;
       const isCurrentlyVerified = Boolean(existingSubscriber.email_verified);
 
-      console.log(`Existing subscriber: ${email}, unsubscribed: ${isCurrentlyUnsubscribed}, verified: ${isCurrentlyVerified}`);
+      console.log(`Existing subscriber: ${maskEmailForLogging(email)}, unsubscribed: ${isCurrentlyUnsubscribed}, verified: ${isCurrentlyVerified}`);
 
       if (isCurrentlyUnsubscribed) {
         // Scenario 2: Previously unsubscribed user resubscribing
-        console.log(`Resubscribing previously unsubscribed user: ${email}`);
+        console.log(`Resubscribing previously unsubscribed user: ${maskEmailForLogging(email)}`);
 
         await env.DB.prepare(`
           UPDATE subscribers
@@ -184,7 +194,7 @@ async function handleSubscriptionInDatabase(
 
       } else if (isCurrentlyVerified) {
         // Scenario 3: Previously verified user resubscribing (maybe they forgot they were subscribed)
-        console.log(`Resubscribing previously verified user: ${email} - resetting verification status`);
+        console.log(`Resubscribing previously verified user: ${maskEmailForLogging(email)} - resetting verification status`);
 
         await env.DB.prepare(`
           UPDATE subscribers
@@ -208,7 +218,7 @@ async function handleSubscriptionInDatabase(
 
       } else {
         // Scenario 4: Existing unverified user subscribing again
-        console.log(`Updating existing unverified user: ${email} - generating new token`);
+        console.log(`Updating existing unverified user: ${maskEmailForLogging(email)} - generating new token`);
 
         await env.DB.prepare(`
           UPDATE subscribers
@@ -303,7 +313,7 @@ async function processSubscription(
           metadata: metadata
         });
 
-        console.log(`Verification email queued for: ${email}`);
+        console.log(`Verification email queued for: ${maskEmailForLogging(email)}`);
       } catch (queueError) {
         console.error('Failed to queue verification email:', queueError);
         // Continue with success response - email verification can be retried
@@ -361,7 +371,7 @@ async function handleSubscriptionRequest(
     };
 
     console.log('Parsed request data:', {
-      email: requestData.email,
+      email: maskEmailForLogging(requestData.email),
       hasTurnstileToken: !!requestData.turnstileToken
     });
 

@@ -1,3 +1,13 @@
+// Helper function to mask email addresses for logging (PII protection)
+function maskEmailForLogging(email: string): string {
+  if (!email || !email.includes('@')) {
+    return 'invalid-email';
+  }
+  const [localPart, domain] = email.split('@');
+  const maskedLocal = localPart.length > 3 ? localPart.substring(0, 3) + '***' : '***';
+  return `${maskedLocal}@${domain}`;
+}
+
 interface Env {
   DB: D1Database;
   HMAC_SECRET_KEY: string;
@@ -179,7 +189,7 @@ export async function handleUnsubscribe(request: Request, env: Env): Promise<Res
     const token = url.searchParams.get('token');
     const email = url.searchParams.get('email');
 
-    console.log('Unsubscribe request:', { hasToken: !!token, email, hasEmail: !!email });
+    console.log('Unsubscribe request:', { hasToken: !!token, email: email ? maskEmailForLogging(email) : 'undefined', hasEmail: !!email });
 
     // Validate parameters
     if (!token || !email || token.trim() === '' || email.trim() === '') {
