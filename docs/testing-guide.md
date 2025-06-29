@@ -319,8 +319,8 @@ npm run test:smoke:production
 | Environment | Pattern | Example | Email Sent? |
 |-------------|---------|---------|-------------|
 | Local | `@example.com` | `test@example.com` | No (mocked) |
-| Staging | `@test.example.com` | `staging-test-123@test.example.com` | No (filtered) |
-| Production | `@smoke-test.example.com` | `smoke-test-456@smoke-test.example.com` | No (filtered) |
+| Staging | `test+staging-smoke-test@rnwolf.net` | `test+staging-smoke-test-123-abc@rnwolf.net` | No (filtered) |
+| Production | `test+smoke-test@rnwolf.net` | `test+smoke-test-456-def@rnwolf.net` | No (filtered) |
 
 ### Email Filtering
 
@@ -336,6 +336,12 @@ const testEmailDomains = [
   '@performance-test.example.com',
   '@smoke-test.example.com'
 ];
+
+// Also check for plus addressing test patterns (test+something@domain)
+const isTestEmailDomain = testEmailDomains.some(domain => email.endsWith(domain));
+const isTestEmailPlusAddressing = email.includes('+smoke-test') || email.includes('+staging-smoke-test') || email.startsWith('test+');
+
+const isTestEmail = isTestEmailDomain || isTestEmailPlusAddressing;
 ```
 
 ### Database State Management

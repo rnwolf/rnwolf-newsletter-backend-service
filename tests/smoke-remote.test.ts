@@ -54,7 +54,14 @@ function generateSmokeTestEmail(): string {
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(7);
   const prefix = TEST_ENV === 'staging' ? 'staging-smoke-test' : 'smoke-test';
-  return `${prefix}-${timestamp}-${random}@smoke-test.example.com`;
+  
+  // Use the environment's zone_name from wrangler.jsonc instead of smoke-test.example.com
+  // This ensures we use a real domain that won't bounce
+  const domain = 'rnwolf.net'; // From wrangler.jsonc zone_name for both staging and production
+  
+  // Use plus addressing (subaddressing) to make test emails easily identifiable
+  // Format: test+{prefix}-{timestamp}-{random}@{domain}
+  return `test+${prefix}-${timestamp}-${random}@${domain}`;
 }
 
 describe(`Remote Environment Smoke Tests (${TEST_ENV})`, () => {

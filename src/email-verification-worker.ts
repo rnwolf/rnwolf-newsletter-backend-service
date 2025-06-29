@@ -210,7 +210,11 @@ async function sendVerificationEmail(email: string, content: { subject: string; 
     '@smoke-test.example.com'
   ];
   
-  const isTestEmail = testEmailDomains.some(domain => email.endsWith(domain));
+  // Also check for plus addressing test patterns (test+something@domain)
+  const isTestEmailDomain = testEmailDomains.some(domain => email.endsWith(domain));
+  const isTestEmailPlusAddressing = email.includes('+smoke-test') || email.includes('+staging-smoke-test') || email.startsWith('test+');
+  
+  const isTestEmail = isTestEmailDomain || isTestEmailPlusAddressing;
   
   if (isTestEmail) {
     console.log(`[TEST_EMAIL_SKIP] Skipping actual email send for test email: ${maskEmailForLogging(email)} (environment: ${env.ENVIRONMENT})`);

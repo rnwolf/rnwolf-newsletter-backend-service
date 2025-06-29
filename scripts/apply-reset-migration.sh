@@ -61,19 +61,64 @@ backup_data() {
     echo ""
     echo -e "${YELLOW}📦${NC} Backing up existing data from ${env}..."
 
-    # Try to export existing data
+    # Try to export existing data using proper D1 commands
     if npx wrangler d1 execute DB --env "$env" --remote --command="SELECT name FROM sqlite_master WHERE type='table';" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} Database connection successful"
 
         # Export subscribers table if it exists
         if npx wrangler d1 execute DB --env "$env" --remote --command="SELECT COUNT(*) FROM subscribers;" > /dev/null 2>&1; then
             echo -e "${YELLOW}!${NC} Exporting existing subscribers data..."
-            npx wrangler d1 execute DB --env "$env" --remote --command=".dump subscribers" > "$backup_file" 2>/dev/null || true
+            
+            # Create proper SQL backup with INSERT statements
+            cat > "$backup_file" << 'EOF'
+-- Database backup created by apply-reset-migration.sh
+-- Environment: ENV_PLACEHOLDER
+-- Timestamp: TIMESTAMP_PLACEHOLDER
+
+-- Create subscribers table if it doesn't exist
+CREATE TABLE IF NOT EXISTS subscribers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    verification_token TEXT,
+    verified BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert existing data
+EOF
+            
+            # Replace placeholders
+            sed -i "s/ENV_PLACEHOLDER/$env/g" "$backup_file"
+            sed -i "s/TIMESTAMP_PLACEHOLDER/$(date -u +%Y-%m-%dT%H:%M:%SZ)/g" "$backup_file"
+            
+            # Export data as INSERT statements
+            npx wrangler d1 execute DB --env "$env" --remote --command="SELECT 'INSERT INTO subscribers (id, email, verification_token, verified, created_at, updated_at) VALUES (' || id || ', ''' || email || ''', ' || CASE WHEN verification_token IS NULL THEN 'NULL' ELSE '''' || verification_token || '''' END || ', ' || verified || ', ''' || created_at || ''', ''' || updated_at || ''');' FROM subscribers;" --json 2>/dev/null | \
+            python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    if 'results' in data and len(data['results']) > 0:
+        for result in data['results']:
+            if 'results' in result:
+                for row in result['results']:
+                    if len(row) > 0:
+                        print(row[0])
+except:
+    pass
+" >> "$backup_file" 2>/dev/null || true
 
             if [ -f "$backup_file" ] && [ -s "$backup_file" ]; then
-                echo -e "${GREEN}✓${NC} Backup saved to: $backup_file"
+                # Check if backup contains actual data (more than just the header)
+                if grep -q "INSERT INTO subscribers" "$backup_file"; then
+                    echo -e "${GREEN}✓${NC} Backup saved to: $backup_file"
+                else
+                    echo -e "${YELLOW}!${NC} No data to backup (empty table)"
+                    # Keep the file but add a note
+                    echo "-- No data found in subscribers table" >> "$backup_file"
+                fi
             else
-                echo -e "${YELLOW}!${NC} No data to backup or backup failed"
+                echo -e "${YELLOW}!${NC} Backup failed or no data found"
                 rm -f "$backup_file"
             fi
         else

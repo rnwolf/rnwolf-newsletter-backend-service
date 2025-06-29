@@ -104,9 +104,12 @@ async function getSmokeTestEmailsFromDatabase() {
     console.log('🔍 Querying database for smoke test emails...');
 
     // Different patterns for different environments
+    // Updated to handle both old smoke-test.example.com and new plus addressing patterns
     const patterns = [
-        '%smoke-test%@smoke-test.example.com',
-        '%staging-smoke-test%@smoke-test.example.com'
+        '%smoke-test%@smoke-test.example.com',  // Legacy pattern
+        '%staging-smoke-test%@smoke-test.example.com',  // Legacy pattern
+        'test+%smoke-test%@rnwolf.net',  // New plus addressing pattern
+        'test+%staging-smoke-test%@rnwolf.net'  // New plus addressing pattern
     ];
 
     let allEmails = [];
@@ -148,7 +151,10 @@ function getSmokeTestEmailsFromFile(filename) {
         .split('\n')
         .map(email => email.trim())
         .filter(email => email.length > 0)
-        .filter(email => email.includes('@smoke-test.example.com'));
+        .filter(email => 
+            email.includes('@smoke-test.example.com') || 
+            (email.startsWith('test+') && email.includes('@rnwolf.net'))
+        );
 
     console.log(`Found ${emails.length} smoke test emails in file`);
     return emails;

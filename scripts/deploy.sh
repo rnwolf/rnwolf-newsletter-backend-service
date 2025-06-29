@@ -157,7 +157,7 @@ check_prerequisites() {
     fi
 
     # Check if required commands exist
-    local commands=("node" "npm" "npx" "curl" "git")
+    local commands=("node" "npm" "npx" "curl" "git" "python3" "uv")
     for cmd in "${commands[@]}"; do
         if ! command -v "$cmd" &> /dev/null; then
             print_error "Required command '$cmd' not found. Please install it."
@@ -276,6 +276,79 @@ backup_current_deployment() {
 EOF
 
     print_success "Backup created at $backup_dir"
+}
+
+# Function to backup database data
+backup_database() {
+    print_step "Creating database backup for $ENVIRONMENT environment..."
+
+    # Check if Python backup script exists
+    if [[ -f "$PROJECT_DIR/scripts/db-backup-restore.py" ]]; then
+        print_status "Using Python backup utility..."
+        
+        # Use the Python backup script which handles D1 properly
+        if uv run "$PROJECT_DIR/scripts/db-backup-restore.py" backup "$ENVIRONMENT" --no-verify; then
+            print_success "Database backup completed successfully"
+        else
+            print_warning "Database backup failed, but continuing deployment"
+            print_status "You may want to create a manual backup before proceeding"
+        fi
+    else
+        print_warning "Python backup script not found, using fallback method..."
+        
+        # Fallback: Create a simple backup using D1 commands
+        local backup_file="$PROJECT_DIR/backup-${ENVIRONMENT}-$(date +%Y%m%d-%H%M%S).sql"
+        
+        # Create backup header
+        cat > "$backup_file" << EOF
+-- Database backup created by deploy.sh
+-- Environment: $ENVIRONMENT
+-- Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+-- Create subscribers table if it doesn't exist
+CREATE TABLE IF NOT EXISTS subscribers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    verification_token TEXT,
+    verified BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert existing data
+EOF
+
+        # Try to export data
+        if npx wrangler d1 execute DB --env "$ENVIRONMENT" --remote --command="SELECT COUNT(*) FROM subscribers;" > /dev/null 2>&1; then
+            print_status "Exporting subscriber data..."
+            
+            # Export data as INSERT statements
+            npx wrangler d1 execute DB --env "$ENVIRONMENT" --remote --command="SELECT 'INSERT INTO subscribers (id, email, verification_token, verified, created_at, updated_at) VALUES (' || id || ', ''' || email || ''', ' || CASE WHEN verification_token IS NULL THEN 'NULL' ELSE '''' || verification_token || '''' END || ', ' || verified || ', ''' || created_at || ''', ''' || updated_at || ''');' FROM subscribers;" --json 2>/dev/null | \
+            python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    if 'results' in data and len(data['results']) > 0:
+        for result in data['results']:
+            if 'results' in result:
+                for row in result['results']:
+                    if len(row) > 0:
+                        print(row[0])
+except:
+    pass
+" >> "$backup_file" 2>/dev/null || true
+
+            if grep -q "INSERT INTO subscribers" "$backup_file"; then
+                print_success "Database backup saved to: $backup_file"
+            else
+                echo "-- No data found in subscribers table" >> "$backup_file"
+                print_warning "No data to backup (empty table)"
+            fi
+        else
+            echo "-- Could not connect to database or table does not exist" >> "$backup_file"
+            print_warning "Could not export data - database may be empty or inaccessible"
+        fi
+    fi
 }
 
 # Function to create a D1 time-travel bookmark before migration
@@ -712,6 +785,7 @@ main() {
     verify_environment_config
     run_tests
     backup_current_deployment
+    backup_database
     deploy_to_environment
     verify_deployment
     run_environment_tests

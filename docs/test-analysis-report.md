@@ -442,13 +442,13 @@ npm run metrics:production
 
 ### Staging Environment
 
-- **Test Emails**: Format `staging-smoke-test-{timestamp}-{random}@smoke-test.example.com`
+- **Test Emails**: Format `test+staging-smoke-test-{timestamp}-{random}@rnwolf.net`
 - **Cleanup**: Automatic via deployment script
 - **Persistence**: Test data may persist between runs
 
 ### Production Environment
 
-- **Test Emails**: Format `smoke-test-{timestamp}-{random}@smoke-test.example.com`
+- **Test Emails**: Format `test+smoke-test-{timestamp}-{random}@rnwolf.net`
 - **Cleanup**: Immediate automatic removal
 - **Logging**: All test emails logged for audit
 

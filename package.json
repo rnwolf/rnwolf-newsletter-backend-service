@@ -69,6 +69,12 @@
     "db:migrate:staging": "./scripts/apply-reset-migration.sh staging",
     "db:migrate:production": "./scripts/apply-reset-migration.sh production",
 
+    "db:backup:staging": "uv run ./scripts/db-backup-restore.py backup staging",
+    "db:backup:production": "uv run ./scripts/db-backup-restore.py backup production",
+    "db:restore:staging": "uv run ./scripts/db-backup-restore.py restore staging",
+    "db:restore:production": "uv run ./scripts/db-backup-restore.py restore production",
+    "db:list-backups": "uv run ./scripts/db-backup-restore.py list-backups",
+
     "type-check": "tsc --noEmit",
     "lint": "echo 'Add linting when ready'"
   },
