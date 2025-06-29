@@ -291,7 +291,7 @@ create_d1_bookmark() {
 
     # Get the current bookmark
     local bookmark_info
-    bookmark_info=$(npx wrangler d1 time-travel info DB --env "$env" --remote)
+    bookmark_info=$(npx wrangler d1 time-travel info DB --env "$env")
 
     if [[ $? -ne 0 ]]; then
         print_warning "Could not retrieve D1 time-travel info. Skipping bookmark creation."
@@ -385,8 +385,10 @@ run_environment_tests() {
     print_step "Running $ENVIRONMENT environment tests..."
 
     if [[ "$ENVIRONMENT" == "staging" ]]; then
-        if ! npm run test:staging; then
-            print_error "Staging tests failed"
+        # Run integration tests against the deployed staging environment
+        # This ensures tests use the correct CORS origin and base URL from staging config
+        if ! npm run test:staging:workers; then
+            print_error "Staging integration tests failed"
             exit 1
         fi
     elif [[ "$ENVIRONMENT" == "production" ]]; then

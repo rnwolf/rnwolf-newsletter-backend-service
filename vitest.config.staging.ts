@@ -1,6 +1,9 @@
 // vitest.config.staging.ts
 import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
 
+// Ensure environment is set for staging
+process.env.ENVIRONMENT = 'staging';
+
 export default defineWorkersConfig({
   test: {
     setupFiles: ['./tests/setup-staging.ts'],
@@ -16,10 +19,12 @@ export default defineWorkersConfig({
         miniflare: {
           d1Databases: ['DB'],
           compatibilityFlags: ['nodejs_compat'],
-          // For staging, secrets should come from actual environment
+          // Explicitly set environment variables to ensure they override any defaults
           vars: {
             ENVIRONMENT: 'staging',
-            CORS_ORIGIN: 'https://staging.rnwolf.net' // From wrangler.jsonc staging env
+            API_BASE_URL: 'https://api-staging.rnwolf.net',
+            CORS_ORIGIN: 'https://staging.rnwolf.net',
+            API_VERSION: 'v1'
           },
           // Bindings are for secrets, KV, D1, etc.
           bindings: {

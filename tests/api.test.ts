@@ -73,11 +73,20 @@ async function makeRequest(path: string, options?: RequestInit): Promise<Respons
 // Helper function to generate unique test emails for remote environments
 function generateTestEmail(base: string): string {
   if (config.isLocal) {
+    // Local testing - use original email
     return base;
   } else {
-    // For staging/production, add timestamp to ensure uniqueness
+    // Remote testing (staging/production) - use timestamped test emails
     const timestamp = Date.now();
-    return base.replace('@', `-${timestamp}@`);
+    const randomId = Math.random().toString(36).substring(2, 8);
+    
+    // For staging/production, use a pattern that's clearly a test
+    // and will be filtered out by the email worker
+    if (base.includes('@example.com')) {
+      return base.replace('@example.com', `+test-${timestamp}-${randomId}@test.example.com`);
+    } else {
+      return base.replace('@', `+test-${timestamp}-${randomId}@`);
+    }
   }
 }
 

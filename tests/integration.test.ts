@@ -88,7 +88,7 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
 
   describe('Complete Newsletter Flow', () => {
     it('should handle full subscribe -> unsubscribe flow', async () => {
-      const testEmail = TEST_ENV === 'local' ? 'integration-test@example.com' : `integration-${Date.now()}@example.com`;
+      const testEmail = TEST_ENV === 'local' ? 'integration-test@example.com' : `integration-${Date.now()}@test.example.com`;
 
       // Step 1: Subscribe to newsletter
       const subscribeResponse = await makeRequest('/v1/newsletter/subscribe', {
@@ -155,7 +155,7 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should handle resubscription after unsubscribe', async () => {
-      const testEmail = TEST_ENV === 'local' ? 'resubscribe-test@example.com' : `resubscribe-${Date.now()}@example.com`;
+      const testEmail = TEST_ENV === 'local' ? 'resubscribe-test@example.com' : `resubscribe-${Date.now()}@test.example.com`;
 
       // Step 1: Initial subscription
       const subscribeResponse1 = await makeRequest('/v1/newsletter/subscribe', {
@@ -203,7 +203,7 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should prevent unsubscribe with invalid token', async () => {
-      const testEmail = TEST_ENV === 'local' ? 'invalid-token-test@example.com' : `invalid-${Date.now()}@example.com`;
+      const testEmail = TEST_ENV === 'local' ? 'invalid-token-test@example.com' : `invalid-${Date.now()}@test.example.com`;
 
       // Step 1: Subscribe first
       await makeRequest('/v1/newsletter/subscribe', {
@@ -238,8 +238,8 @@ describe(`Newsletter Integration Tests (${TEST_ENV} environment)`, () => {
     });
 
     it('should prevent unsubscribe with token for different email', async () => {
-      const testEmail1 = TEST_ENV === 'local' ? 'email1@example.com' : `email1-${Date.now()}@example.com`;
-      const testEmail2 = TEST_ENV === 'local' ? 'email2@example.com' : `email2-${Date.now()}@example.com`;
+      const testEmail1 = TEST_ENV === 'local' ? 'email1@example.com' : `email1-${Date.now()}@test.example.com`;
+      const testEmail2 = TEST_ENV === 'local' ? 'email2@example.com' : `email2-${Date.now()}@test.example.com`;
 
       // Step 1: Subscribe both emails
       await makeRequest('/v1/newsletter/subscribe', {

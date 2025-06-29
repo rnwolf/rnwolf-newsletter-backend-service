@@ -1,5 +1,9 @@
 // vitest.config.production.ts
 import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+
+// Ensure environment is set for production
+process.env.ENVIRONMENT = 'production';
+
 // This configuration is for production smoke tests
 export default defineWorkersConfig({
   test: {
@@ -16,10 +20,12 @@ export default defineWorkersConfig({
         miniflare: {
           d1Databases: ['DB'],
           compatibilityFlags: ['nodejs_compat'],
-          // Vars are for non-secret configuration
+          // Explicitly set environment variables to ensure they override any defaults
           vars: {
             ENVIRONMENT: 'production',
-            CORS_ORIGIN: 'https://www.rnwolf.net' // From wrangler.jsonc production env
+            API_BASE_URL: 'https://api.rnwolf.net',
+            CORS_ORIGIN: 'https://www.rnwolf.net',
+            API_VERSION: 'v1'
           },
           // Bindings are for secrets, KV, D1, etc.
           bindings: {

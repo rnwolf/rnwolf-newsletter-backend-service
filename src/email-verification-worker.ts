@@ -188,10 +188,30 @@ Visit our website: https://www.rnwolf.net/
 async function sendVerificationEmail(email: string, content: { subject: string; html: string; text: string }, env: Env): Promise<void> {
   // Using MailChannels (free tier is discontinued but paid tier available)
 
-  // Check if this is a performance test email and skip actual sending
-  if (email.endsWith('@performance-test.example.com')) {
-    console.log(`[PERF_TEST_SKIP] Skipping actual email send for performance test email: ${email}`);
-    return; // Do not proceed to send the email
+  // Check if this is a test email and skip actual sending in non-production environments
+  const testEmailDomains = [
+    '@example.com',
+    '@example.org', 
+    '@example.net',
+    '@test.com',
+    '@test.example.com',
+    '@performance-test.example.com',
+    '@smoke-test.example.com'
+  ];
+  
+  const isTestEmail = testEmailDomains.some(domain => email.endsWith(domain));
+  
+  if (isTestEmail) {
+    console.log(`[TEST_EMAIL_SKIP] Skipping actual email send for test email: ${email} (environment: ${env.ENVIRONMENT})`);
+    
+    // In staging/local environments, don't send emails to test domains
+    if (env.ENVIRONMENT !== 'production') {
+      console.log(`[TEST_EMAIL_SKIP] Test email blocked in ${env.ENVIRONMENT} environment`);
+      return; // Do not proceed to send the email
+    } else {
+      // In production, log warning but allow (in case someone actually uses example.com)
+      console.warn(`[TEST_EMAIL_WARNING] Attempting to send to test domain in production: ${email}`);
+    }
   }
 
   if (!env.MAILCHANNEL_API_KEY) {
