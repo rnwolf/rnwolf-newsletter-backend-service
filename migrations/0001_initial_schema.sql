@@ -1,23 +1,9 @@
--- DESTRUCTIVE RESET: Complete schema reset with email verification support
--- This script drops all existing data and recreates the schema from scratch
--- WARNING: This is NOT a migration! For incremental migrations, use: npm run db:migrate:{env}
--- This reset script is equivalent to applying migration 0001_initial_schema.sql on a clean database
+-- Migration 001: Initial schema
+-- Creates the complete initial schema for the newsletter service
+-- This includes subscribers table, email verification queue log, and all necessary indexes and triggers
 
--- ========================================
--- WARNING: This migration will delete ALL data
--- Only run this if you're certain there are no production users
--- ========================================
-
--- Drop all existing tables and indexes
-DROP TABLE IF EXISTS subscribers;
-DROP TABLE IF EXISTS email_verification_queue_log;
-
--- Remove any existing indexes (they'll be dropped with tables, but being explicit)
-DROP INDEX IF EXISTS idx_email;
-DROP INDEX IF EXISTS idx_subscribed_at;
-DROP INDEX IF EXISTS idx_subscription_status;
-DROP INDEX IF EXISTS idx_verification_token;
-DROP INDEX IF EXISTS idx_email_verified;
+-- Enable foreign key constraint deferral for safe table creation
+PRAGMA defer_foreign_keys = true;
 
 -- ========================================
 -- Create subscribers table with complete schema
@@ -33,7 +19,7 @@ CREATE TABLE subscribers (
     subscribed_at DATETIME NOT NULL,
     unsubscribed_at DATETIME NULL,
 
-    -- Email verification fields (NEW)
+    -- Email verification fields
     email_verified BOOLEAN DEFAULT FALSE NOT NULL,
     verification_token TEXT NULL,
     verification_sent_at DATETIME NULL,
@@ -51,27 +37,8 @@ CREATE TABLE subscribers (
 );
 
 -- ========================================
--- Create performance indexes
--- ========================================
-
--- Core subscription indexes
-CREATE INDEX idx_email ON subscribers(email);
-CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
-
--- Email verification indexes (NEW)
-CREATE INDEX idx_email_verified ON subscribers(email_verified);
-CREATE INDEX idx_verification_token ON subscribers(verification_token);
-
--- Composite index for active verified subscribers (newsletter sending)
-CREATE INDEX idx_active_verified_subscribers ON subscribers(email_verified, unsubscribed_at);
-
--- Composite index for subscription status tracking
-CREATE INDEX idx_subscription_status ON subscribers(subscribed_at, unsubscribed_at);
-
-
--- ========================================
 -- Create email verification queue tracking table
--- (Optional: for tracking queue processing status)
+-- (For tracking queue processing status)
 -- ========================================
 
 CREATE TABLE email_verification_queue_log (
@@ -85,6 +52,24 @@ CREATE TABLE email_verification_queue_log (
     retry_count INTEGER DEFAULT 0,
     error_message TEXT NULL
 );
+
+-- ========================================
+-- Create performance indexes
+-- ========================================
+
+-- Core subscription indexes
+CREATE INDEX idx_email ON subscribers(email);
+CREATE INDEX idx_subscribed_at ON subscribers(subscribed_at);
+
+-- Email verification indexes
+CREATE INDEX idx_email_verified ON subscribers(email_verified);
+CREATE INDEX idx_verification_token ON subscribers(verification_token);
+
+-- Composite index for active verified subscribers (newsletter sending)
+CREATE INDEX idx_active_verified_subscribers ON subscribers(email_verified, unsubscribed_at);
+
+-- Composite index for subscription status tracking
+CREATE INDEX idx_subscription_status ON subscribers(subscribed_at, unsubscribed_at);
 
 -- Index for queue tracking
 CREATE INDEX idx_queue_email ON email_verification_queue_log(email);
@@ -126,32 +111,5 @@ BEGIN
     WHERE id = NEW.id;
 END;
 
--- ========================================
--- Verification of schema creation
--- ========================================
-
--- Query to verify table structure (for debugging)
--- SELECT name, sql FROM sqlite_master WHERE type='table' AND name LIKE '%subscribers%';
-
--- Query to verify indexes (for debugging)
--- SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='subscribers';
-
-
--- ========================================
--- Schema verification queries
--- (Run these manually after migration to verify success)
--- ========================================
-
-/*
--- Verify subscribers table structure
-PRAGMA table_info(subscribers);
-
--- Verify indexes exist
-SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='subscribers';
-
--- Verify triggers exist
-SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='subscribers';
-
--- Count tables created
-SELECT COUNT(*) as table_count FROM sqlite_master WHERE type='table' AND name IN ('subscribers', 'email_verification_queue_log');
-*/
+-- Reset foreign key constraint deferral
+PRAGMA defer_foreign_keys = false;

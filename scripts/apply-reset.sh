@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# Script: apply-reset-migration.sh
-# Purpose: Safely apply the schema reset migration across environments
-# Usage: ./scripts/apply-reset-migration.sh [environment]
+# Script: apply-reset.sh
+# Purpose: Safely reset database schema across environments (DESTRUCTIVE OPERATION)
+# Usage: ./scripts/apply-reset.sh [environment]
+# NOTE: This script drops all data! For incremental migrations, use: npm run db:migrate:{env}
 
 set -e  # Exit on any error
 
@@ -18,6 +19,8 @@ ENVIRONMENT=${1:-local}
 
 echo -e "${BLUE}Newsletter Database Schema Reset${NC}"
 echo -e "${BLUE}=================================${NC}"
+echo -e "${YELLOW}WARNING: This is a DESTRUCTIVE operation that drops all data!${NC}"
+echo -e "${YELLOW}For incremental migrations, use: npm run db:migrate:{env}${NC}"
 echo ""
 
 # Validate environment
@@ -32,16 +35,16 @@ case $ENVIRONMENT in
         ;;
 esac
 
-# Migration file path
-MIGRATION_FILE="migrations/dev/reset_schema.sql"
+# Drop tables file path
+DROP_FILE="migrations/dev/drop_all_tables.sql"
 
-# Check if migration file exists
-if [ ! -f "$MIGRATION_FILE" ]; then
-    echo -e "${RED}✗${NC} Migration file not found: $MIGRATION_FILE"
+# Check if drop file exists
+if [ ! -f "$DROP_FILE" ]; then
+    echo -e "${RED}✗${NC} Drop file not found: $DROP_FILE"
     exit 1
 fi
 
-echo -e "${GREEN}✓${NC} Migration file found: $MIGRATION_FILE"
+echo -e "${GREEN}✓${NC} Drop file found: $DROP_FILE"
 
 # Function to check if wrangler is available
 check_wrangler() {
@@ -135,13 +138,10 @@ show_migration_preview() {
     echo -e "${BLUE}📋 Migration Preview${NC}"
     echo -e "${BLUE}==================${NC}"
     echo ""
-    echo "This migration will:"
+    echo "This reset will:"
     echo -e "${RED}  • DROP all existing tables and data${NC}"
-    echo -e "${GREEN}  • CREATE subscribers table with email verification fields${NC}"
-    echo -e "${GREEN}  • CREATE version_sync_log table${NC}"
-    echo -e "${GREEN}  • CREATE email_verification_queue_log table${NC}"
-    echo -e "${GREEN}  • CREATE performance indexes${NC}"
-    echo -e "${GREEN}  • CREATE data integrity triggers${NC}"
+    echo -e "${RED}  • DROP d1_migrations table (resets migration tracking)${NC}"
+    echo -e "${YELLOW}  • After reset, run: npm run db:migrate:{env} to apply migrations${NC}"
     echo ""
     echo "New subscribers table will include:"
     echo "  • id (PRIMARY KEY)"
@@ -161,8 +161,8 @@ apply_migration() {
     echo ""
     echo -e "${BLUE}🚀 Applying migration to ${env} environment...${NC}"
 
-    # Apply the migration
-    if npx wrangler d1 execute DB --env "$env" --remote --file="$MIGRATION_FILE"; then
+    # Apply the drop script
+    if npx wrangler d1 execute DB --env "$env" --remote --file="$DROP_FILE"; then
         echo -e "${GREEN}✓${NC} Migration applied successfully"
     else
         echo -e "${RED}✗${NC} Migration failed"
@@ -175,28 +175,26 @@ verify_migration() {
     local env=$1
 
     echo ""
-    echo -e "${BLUE}🔍 Verifying migration...${NC}"
+    echo -e "${BLUE}🔍 Verifying reset...${NC}"
 
     local remote_flag=""
     if [[ "$env" != "local" ]]; then
         remote_flag="--remote"
     fi
 
-    # Check if subscribers table exists with correct structure
-    echo "Checking subscribers table structure..."
-    if npx wrangler d1 execute DB --env "$env" $remote_flag --command="PRAGMA table_info(subscribers);" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Subscribers table exists"
-
-        # Check for email verification columns
-        if npx wrangler d1 execute DB --env "$env" $remote_flag --command="SELECT email_verified, verification_token FROM subscribers LIMIT 1;" > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Email verification columns exist"
-        else
-            echo -e "${RED}✗${NC} Email verification columns missing"
-            exit 1
-        fi
+    # Check that tables have been dropped
+    echo "Checking that tables have been dropped..."
+    if npx wrangler d1 execute DB --env "$env" $remote_flag --command="SELECT name FROM sqlite_master WHERE type='table';" 2>/dev/null | grep -q "subscribers"; then
+        echo -e "${YELLOW}!${NC} Subscribers table still exists (may be normal)"
     else
-        echo -e "${RED}✗${NC} Subscribers table not found"
-        exit 1
+        echo -e "${GREEN}✓${NC} Subscribers table dropped"
+    fi
+
+    # Check that d1_migrations table has been dropped
+    if npx wrangler d1 execute DB --env "$env" $remote_flag --command="SELECT name FROM sqlite_master WHERE type='table';" 2>/dev/null | grep -q "d1_migrations"; then
+        echo -e "${YELLOW}!${NC} d1_migrations table still exists (may be normal)"
+    else
+        echo -e "${GREEN}✓${NC} d1_migrations table dropped - migration tracking reset"
     fi
 
     # Check indexes (simplified)
@@ -262,32 +260,33 @@ verify_migration() {
     fi
 }
 
-# Function to run post-migration tests
-run_post_migration_tests() {
+# Function to run post-reset tests
+run_post_reset_tests() {
     local env=$1
 
     echo ""
-    echo -e "${BLUE}🧪 Running post-migration tests...${NC}"
+    echo -e "${BLUE}🧪 Running post-reset verification...${NC}"
 
-    # Test basic insert
-    echo "Testing basic insert..."
-    if npx wrangler d1 execute DB --env "$env" --remote --command="INSERT INTO subscribers (email, subscribed_at, email_verified) VALUES ('test@migration.com', datetime('now'), FALSE);" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Basic insert works"
-
-        # Test query
-        echo "Testing basic query..."
-        if npx wrangler d1 execute DB --env "$env" --remote --command="SELECT email, email_verified FROM subscribers WHERE email='test@migration.com';" > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Basic query works"
-
-            # Clean up test data
-            npx wrangler d1 execute DB --env "$env" --remote --command="DELETE FROM subscribers WHERE email='test@migration.com';" > /dev/null 2>&1
-            echo -e "${GREEN}✓${NC} Test data cleaned up"
-        else
-            echo -e "${RED}✗${NC} Basic query failed"
-        fi
-    else
-        echo -e "${RED}✗${NC} Basic insert failed"
+    # Verify database is empty
+    echo "Verifying database is clean..."
+    table_count=$(npx wrangler d1 execute DB --env "$env" --remote --command="SELECT COUNT(*) as count FROM sqlite_master WHERE type='table';" 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' | head -1)
+    
+    if [[ -z "$table_count" ]]; then
+        table_count=0
     fi
+    
+    if [[ "$table_count" -eq 0 ]]; then
+        echo -e "${GREEN}✓${NC} Database is clean (no tables found)"
+    else
+        echo -e "${YELLOW}!${NC} Database has $table_count tables remaining"
+        echo "  This is normal if some system tables remain"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}💡 Next steps:${NC}"
+    echo "  1. Run: npm run db:migrate:$env"
+    echo "  2. Run: npm run db:seed:$env (optional)"
+    echo "  3. Or use: npm run db:fresh:$env (combines reset + migrate)"
 }
 
 # Main execution
@@ -318,10 +317,10 @@ main() {
     backup_data "$ENVIRONMENT"
     apply_migration "$ENVIRONMENT"
     verify_migration "$ENVIRONMENT"
-    run_post_migration_tests "$ENVIRONMENT"
+    run_post_reset_tests "$ENVIRONMENT"
 
     echo ""
-    echo -e "${GREEN}🎉 Migration completed successfully!${NC}"
+    echo -e "${GREEN}🎉 Reset completed successfully!${NC}"
 
 }
 

@@ -48,25 +48,8 @@ describe('Queue Processing Tests (local only)', () => {
   beforeEach(async () => {
     await setupTestDatabase(env);
 
-    // Add verification fields to table
-    try {
-      await env.DB.prepare(`
-        ALTER TABLE subscribers
-        ADD COLUMN email_verified BOOLEAN DEFAULT FALSE
-      `).run();
-
-      await env.DB.prepare(`
-        ALTER TABLE subscribers
-        ADD COLUMN verification_token TEXT
-      `).run();
-
-      await env.DB.prepare(`
-        ALTER TABLE subscribers
-        ADD COLUMN verification_sent_at DATETIME
-      `).run();
-    } catch (error) {
-      // Columns might already exist, ignore error
-    }
+    // Note: With the new migration system, email verification columns should already exist
+    // No need to add them manually anymore since they're in 0001_initial_schema.sql
 
     // Set test environment variables
     if (!env.HMAC_SECRET_KEY) {
@@ -75,15 +58,30 @@ describe('Queue Processing Tests (local only)', () => {
     if (!env.ENVIRONMENT) {
       (env as any).ENVIRONMENT = 'local';
     }
+    if (!env.MAILCHANNEL_API_KEY) {
+      (env as any).MAILCHANNEL_API_KEY = 'test-mailchannel-key';
+    }
+    if (!env.SENDER_EMAIL) {
+      (env as any).SENDER_EMAIL = 'test@rnwolf.net';
+    }
+    if (!env.SENDER_NAME) {
+      (env as any).SENDER_NAME = 'Test Newsletter';
+    }
+    if (!env.MAILCHANNEL_AUTH_ID) {
+      (env as any).MAILCHANNEL_AUTH_ID = 'test-auth-id';
+    }
 
     // Mock fetch for email sending
     global.fetch = vi.fn();
+    
+    // Reset the mock before each test
+    vi.clearAllMocks();
   });
 
   describe('Email Verification Queue Consumer', () => {
     it('should process single verification email message successfully', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'queue-test@example.com',
+        email: 'queue-test@testdomain.com',
         verificationToken: 'test-token-123',
         subscribedAt: new Date().toISOString(),
         metadata: {
@@ -139,19 +137,19 @@ describe('Queue Processing Tests (local only)', () => {
     it('should process multiple messages in a batch', async () => {
       const testMessages: EmailVerificationMessage[] = [
         {
-          email: 'batch1@example.com',
+          email: 'batch1@testdomain.com',
           verificationToken: 'token1',
           subscribedAt: new Date().toISOString(),
           metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
         },
         {
-          email: 'batch2@example.com',
+          email: 'batch2@testdomain.com',
           verificationToken: 'token2',
           subscribedAt: new Date().toISOString(),
           metadata: { ipAddress: '192.168.1.2', userAgent: 'Test', country: 'US' }
         },
         {
-          email: 'batch3@example.com',
+          email: 'batch3@testdomain.com',
           verificationToken: 'token3',
           subscribedAt: new Date().toISOString(),
           metadata: { ipAddress: '192.168.1.3', userAgent: 'Test', country: 'CA' }
@@ -188,7 +186,7 @@ describe('Queue Processing Tests (local only)', () => {
 
     it('should retry failed email sending', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'retry-test@example.com',
+        email: 'retry-test@testdomain.com',
         verificationToken: 'retry-token',
         subscribedAt: new Date().toISOString(),
         metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -217,13 +215,13 @@ describe('Queue Processing Tests (local only)', () => {
     it('should handle partial batch failures correctly', async () => {
       const testMessages: EmailVerificationMessage[] = [
         {
-          email: 'success@example.com',
+          email: 'success@testdomain.com',
           verificationToken: 'success-token',
           subscribedAt: new Date().toISOString(),
           metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
         },
         {
-          email: 'failure@example.com',
+          email: 'failure@testdomain.com',
           verificationToken: 'failure-token',
           subscribedAt: new Date().toISOString(),
           metadata: { ipAddress: '192.168.1.2', userAgent: 'Test', country: 'US' }
@@ -259,7 +257,7 @@ describe('Queue Processing Tests (local only)', () => {
 
     it('should handle network timeouts gracefully', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'timeout-test@example.com',
+        email: 'timeout-test@testdomain.com',
         verificationToken: 'timeout-token',
         subscribedAt: new Date().toISOString(),
         metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -285,7 +283,7 @@ describe('Queue Processing Tests (local only)', () => {
 
     it('should handle missing subscriber record gracefully', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'missing@example.com',
+        email: 'missing@testdomain.com',
         verificationToken: 'missing-token',
         subscribedAt: new Date().toISOString(),
         metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -312,7 +310,7 @@ describe('Queue Processing Tests (local only)', () => {
   describe('Email Content Quality', () => {
     it('should include security explanation in email', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'security-test@example.com',
+        email: 'security-test@testdomain.com',
         verificationToken: 'security-token',
         subscribedAt: new Date().toISOString(),
         metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -345,7 +343,7 @@ describe('Queue Processing Tests (local only)', () => {
 
     it('should include unsubscribe option for non-subscribers', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'unsubscribe-test@example.com',
+        email: 'unsubscribe-test@testdomain.com',
         verificationToken: 'unsubscribe-token',
         subscribedAt: new Date().toISOString(),
         metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -383,7 +381,7 @@ describe('Queue Processing Tests (local only)', () => {
       // Generate large batch of messages
       for (let i = 0; i < batchSize; i++) {
         const message: EmailVerificationMessage = {
-          email: `batch-user-${i}@example.com`,
+          email: `batch-user-${i}@testdomain.com`,
           verificationToken: `token-${i}`,
           subscribedAt: new Date().toISOString(),
           metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -421,7 +419,7 @@ describe('Queue Processing Tests (local only)', () => {
 
     it('should handle database connection issues', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'db-error@example.com',
+        email: 'db-error@testdomain.com',
         verificationToken: 'db-error-token',
         subscribedAt: new Date().toISOString(),
         metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -454,7 +452,7 @@ describe('Queue Processing Tests (local only)', () => {
       // Create multiple messages for same user (edge case)
       for (let i = 0; i < 3; i++) {
         concurrentMessages.push({
-          email: 'concurrent@example.com',
+          email: 'concurrent@testdomain.com',
           verificationToken: `concurrent-token-${i}`,
           subscribedAt: new Date().toISOString(),
           metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -465,7 +463,7 @@ describe('Queue Processing Tests (local only)', () => {
       await env.DB.prepare(`
         INSERT INTO subscribers (email, subscribed_at, email_verified, verification_token)
         VALUES (?, ?, FALSE, ?)
-      `).bind('concurrent@example.com', new Date().toISOString(), 'latest-token').run();
+      `).bind('concurrent@testdomain.com', new Date().toISOString(), 'latest-token').run();
 
       (global.fetch as any).mockResolvedValue(
         new Response('', { status: 200 })
@@ -486,7 +484,7 @@ describe('Queue Processing Tests (local only)', () => {
   describe('Integration with Environment', () => {
     it('should use correct email sending domain based on environment', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'env-test@example.com',
+        email: 'env-test@testdomain.com',
         verificationToken: 'env-token',
         subscribedAt: new Date().toISOString(),
         metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -515,7 +513,7 @@ describe('Queue Processing Tests (local only)', () => {
 
     it('should generate environment-appropriate verification URLs', async () => {
       const testMessage: EmailVerificationMessage = {
-        email: 'url-test@example.com',
+        email: 'url-test@testdomain.com',
         verificationToken: 'url-token',
         subscribedAt: new Date().toISOString(),
         metadata: { ipAddress: '192.168.1.1', userAgent: 'Test', country: 'GB' }
@@ -590,7 +588,7 @@ describe('Queue Processing Tests (alternative approach)', () => {
 
     const testMessage = {
       body: {
-        email: 'test@example.com',
+        email: 'test@testdomain.com',
         verificationToken: 'test-token-123'
       },
       id: 'test-message',
@@ -606,8 +604,8 @@ describe('Queue Processing Tests (alternative approach)', () => {
     const fetchCall = (global.fetch as Mock).mock.calls[0];
     const emailBody = JSON.parse(fetchCall[1].body);
 
-    expect(emailBody.content[0].value).toContain('test%40example.com'); // URL encoded
-    expect(emailBody.content[1].value).toContain('test%40example.com'); // URL encoded
+    expect(emailBody.content[0].value).toContain('test%40testdomain.com'); // URL encoded
+    expect(emailBody.content[1].value).toContain('test%40testdomain.com'); // URL encoded
   });
 
 describe('New Queue Processing Tests (local only)', () => {
@@ -699,7 +697,7 @@ describe('New Queue Processing Tests (local only)', () => {
 
       const testMessage = {
         body: {
-          email: 'content-test@example.com',
+          email: 'content-test@testdomain.com',
           verificationToken: 'content-token-123',
           subscriptionData: {
             ip_address: '192.168.1.1',
@@ -737,7 +735,7 @@ describe('New Queue Processing Tests (local only)', () => {
       expect(emailBody).toMatchObject({
         personalizations: [
           {
-            to: [{ email: 'content-test@example.com' } as { email: string }],
+            to: [{ email: 'content-test@testdomain.com' } as { email: string }],
             subject: 'Confirm Your Newsletter Subscription'
           }
         ],
@@ -754,12 +752,12 @@ describe('New Queue Processing Tests (local only)', () => {
       const textContent = emailBody.content.find((c: EmailContentPart) => c.type === 'text/plain');
 
       // Additional specific content checks
-      expect(htmlContent.value).toContain('content-test@example.com');
+      expect(htmlContent.value).toContain('content-test@testdomain.com');
       expect(htmlContent.value).toContain('content-token-123');
       expect(htmlContent.value).toContain('Confirm My Subscription');
       expect(htmlContent.value).toContain('verification link will expire');
 
-      expect(textContent.value).toContain('content-test@example.com');
+      expect(textContent.value).toContain('content-test@testdomain.com');
       expect(textContent.value).toContain('content-token-123');
       expect(textContent.value).toContain('confirm your subscription');
       expect(textContent.value).toContain('verification link will expire');

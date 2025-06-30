@@ -54,20 +54,27 @@
     "test:email-verification:integration": "vitest run tests/email-verification-integration.test.ts --config vitest.config.local.ts",
     "test:email-verification:queue": "vitest run tests/queue-processing.test.ts --config vitest.config.local.ts",
 
-    "db:reset:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --config wrangler.jsonc --file=./migrations/dev/reset_schema.sql",
+    "db:reset:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --config wrangler.jsonc --file=./migrations/dev/drop_all_tables.sql",
     "db:seed:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --config wrangler.jsonc --file=./migrations/dev/database_seed.sql",
     "db:subscribers:local": "dotenv -e .env.local -- wrangler d1 execute DB --env local --config wrangler.jsonc --command \"SELECT * FROM subscribers ORDER BY updated_at ASC LIMIT 10;\"",
 
-    "db:reset:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --config wrangler.jsonc --env staging --remote --file=./migrations/dev/reset_schema.sql",
+    "db:reset:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --config wrangler.jsonc --env staging --remote --file=./migrations/dev/drop_all_tables.sql",
     "db:seed:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --config wrangler.jsonc --env staging --remote --file=./migrations/dev/database_seed.sql",
     "db:subscribers:staging": "dotenv -e .env.staging -- wrangler d1 execute DB --config wrangler.jsonc --env staging --remote --command \"SELECT * FROM subscribers ORDER BY updated_at ASC LIMIT 10;\"",
 
-    "db:reset:production": "dotenv -e .env.production -- wrangler d1 execute DB --config wrangler.jsonc --env production --remote --file=./migrations/dev/reset_schema.sql",
+    "db:reset:production": "dotenv -e .env.production -- wrangler d1 execute DB --config wrangler.jsonc --env production --remote --file=./migrations/dev/drop_all_tables.sql",
     "db:subscribers:production": "dotenv -e .env.production -- wrangler d1 execute DB --config wrangler.jsonc --env production --remote --command \"SELECT * FROM subscribers ORDER BY updated_at ASC LIMIT 10;\"",
 
-    "db:migrate:local": "./scripts/apply-reset-migration.sh local",
-    "db:migrate:staging": "./scripts/apply-reset-migration.sh staging",
-    "db:migrate:production": "./scripts/apply-reset-migration.sh production",
+    "db:migrate:local": "dotenv -e .env.local -- wrangler d1 migrations apply DB --config wrangler.jsonc --env local",
+    "db:migrate:staging": "dotenv -e .env.staging -- wrangler d1 migrations apply DB --config wrangler.jsonc --env staging --remote",
+    "db:migrate:production": "dotenv -e .env.production -- wrangler d1 migrations apply DB --config wrangler.jsonc --env production --remote",
+
+    "db:status:local": "dotenv -e .env.local -- wrangler d1 migrations list DB --config wrangler.jsonc --env local",
+    "db:status:staging": "dotenv -e .env.staging -- wrangler d1 migrations list DB --config wrangler.jsonc --env staging --remote",
+    "db:status:production": "dotenv -e .env.production -- wrangler d1 migrations list DB --config wrangler.jsonc --env production --remote",
+
+    "db:fresh:local": "npm run db:reset:local && npm run db:migrate:local",
+    "db:fresh:staging": "npm run db:reset:staging && npm run db:migrate:staging",
 
     "db:backup:staging": "uv run ./scripts/db-backup-restore.py backup staging",
     "db:backup:production": "uv run ./scripts/db-backup-restore.py backup production",

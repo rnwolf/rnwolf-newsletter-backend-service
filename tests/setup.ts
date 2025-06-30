@@ -42,8 +42,8 @@ export async function setupTestDatabase(testEnv: any) {
     // Drop existing tables if they exist
     try {
       await testEnv.DB.prepare('DROP TABLE IF EXISTS subscribers').run();
-      await testEnv.DB.prepare('DROP TABLE IF EXISTS version_sync_log').run();
       await testEnv.DB.prepare('DROP TABLE IF EXISTS email_verification_queue_log').run();
+      // Note: version_sync_log table removed from new migration schema
     } catch (error) {
       // Ignore errors if tables don't exist
       console.log('Tables dropped or did not exist');
@@ -91,20 +91,8 @@ export async function setupTestDatabase(testEnv: any) {
 
     console.log('✓ Indexes created');
 
-    // Create version_sync_log table
-    await testEnv.DB.prepare(`
-      CREATE TABLE version_sync_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT NOT NULL,
-        action TEXT NOT NULL,
-        api_version TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        data_snapshot TEXT,
-        sync_status TEXT DEFAULT 'pending'
-      )
-    `).run();
-
-    console.log('✓ Version sync log table created');
+    // Note: version_sync_log table removed from new migration schema
+    // It was custom migration tracking that duplicated D1's built-in functionality
 
     // Create email_verification_queue_log table
     await testEnv.DB.prepare(`
