@@ -1,19 +1,25 @@
 graph TB
     %% C4 Model - Level 1: System Context
     User["Website Visitor<br/>Subscribes to newsletter"]
-    EmailClient["Email Client<br/>Receives verification emails"]
+    EmailClient["Email Client<br/>Receives verification emails<br/>Receives newsletter emails"]
     CFTurnstile["Cloudflare Turnstile<br/>Bot protection service"]
-    SMTPService["SMTP Service<br/>Gmail SMTP / SendGrid / Mailgun<br/>Email delivery provider"]
-    NewsletterSystem["Newsletter Subscription System<br/>Handles double opt-in verification"]
-    
+    MailChannels["MailChannels API<br/>Email delivery service"]
+    NewsletterSystem["Newsletter Subscription System<br/>Handles double opt-in verification<br/>& unsubscribe management"]
+    Grafana["Grafana Dashboard<br/>Monitoring & Analytics"]
+    NewsletterSender["Newsletter Sender<br/>Monthly newsletter distribution"]
+
     %% System Context relationships
-    User -.->|"1. Submits subscription form"| NewsletterSystem
-    NewsletterSystem -.->|"2. Validates with Turnstile"| CFTurnstile
-    CFTurnstile -.->|"3. Returns validation result"| NewsletterSystem
-    NewsletterSystem -.->|"4. Sends email via SMTP"| SMTPService
-    SMTPService -.->|"5. Delivers verification email"| EmailClient
-    EmailClient -.->|"6. User clicks verification link"| NewsletterSystem
-    
+    User -.->|1- Submits subscription form| NewsletterSystem
+    NewsletterSystem -.->|2- Validates with Turnstile| CFTurnstile
+    CFTurnstile -.->|3- Returns validation result| NewsletterSystem
+    NewsletterSystem -.->|4- Sends email via API| MailChannels
+    MailChannels -.->|5- Delivers verification email| EmailClient
+    EmailClient -.->|6- User clicks verification link| NewsletterSystem
+    Grafana -.->|7- Fetches metrics| NewsletterSystem
+    NewsletterSender -.->|8- Fetches subscriber list| NewsletterSystem
+    NewsletterSender -.->|9- Sends newsletter email| EmailClient
+    EmailClient -.->|10- User clicks unsubscribe link| NewsletterSystem
+
     %% Legend
     subgraph Legend["Legend - System Context"]
         LegendUser["External Users<br/>People using the system"]
@@ -22,16 +28,16 @@ graph TB
     end
 
     %% Styling
-    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:3px
-    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:3px
-    classDef systemFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px
-    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:3px,color:#000
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:3px,color:#000
+    classDef systemFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px,color:#000
+    classDef legendBox fill:#f5f5f5,stroke:#000,stroke-width:1px,color:#000
 
     class User,EmailClient userFlow
-    class CFTurnstile,SMTPService externalFlow
+    class CFTurnstile,MailChannels,Grafana,NewsletterSender externalFlow
     class NewsletterSystem systemFlow
     class Legend,LegendUser,LegendExternal,LegendSystem legendBox
-    
+
     %% Apply legend colors
     class LegendUser userFlow
     class LegendExternal externalFlow

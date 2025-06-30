@@ -1,66 +1,74 @@
 graph TB
     %% External containers
     WebForm["Newsletter Form"]
-    NewsletterNext["Thank You Page"]
     VerificationEmail["Verification Email<br/>(sent to user)"]
-    NewsletterEmail["Newsletter Email<br/>(monthly newsletter)"]
-    Grafana["Grafana<br/>(Monitoring & Analytics)"]
-    EmailWorker["Email Queue Worker"]
+    UnsubscribeEmail["Unsubscribe Link<br/>(in newsletters)"]
+    Grafana["Grafana Dashboard<br/>(Monitoring & Analytics)"]
     D1DB[("D1 Database")]
-    EmailQueue["Email Queue"]
+    EmailQueue["Email Verification Queue"]
     CFTurnstile["Cloudflare Turnstile"]
-    SMTPService["SMTP Service"]
+    MailChannels["MailChannels API"]
+    NewsletterSender["Newsletter Sender Script"]
 
     %% C4 Model - Level 3: Component View - API Worker
     subgraph APIWorker["Newsletter API Worker"]
         subgraph HTTPHandlers["HTTP Request Handlers"]
-            SubscribeHandler["SubscribeHandler<br/>handleSubscribe()<br/>Processes subscription requests"]
-            VerifyHandler["VerifyHandler<br/>handleVerify()<br/>Processes verification clicks"]
-            MetricsHandler["MetricsHandler<br/>handleMetrics()<br/>Health, metrics & performance for Grafana"]
-            UnsubscribeHandler["UnsubscribeHandler<br/>handleUnsubscribe()<br/>Processes unsubscribe requests"]
+            SubscribeHandler["Subscription Handler<br/>handleSubscriptionRequest()<br/>POST /v1/newsletter/subscribe"]
+            VerifyHandler["Email Verification Handler<br/>handleEmailVerification()<br/>GET /v1/newsletter/verify"]
+            UnsubscribeHandler["Unsubscribe Handler<br/>handleUnsubscribe()<br/>GET /v1/newsletter/unsubscribe"]
+            HealthHandler["Health Check Handler<br/>GET / and /health"]
         end
-        
+
         subgraph BusinessServices["Business Logic Services"]
-            SubscriptionService["SubscriptionService<br/>Subscription business logic<br/>Validation & processing"]
-            VerificationService["VerificationService<br/>Token generation & validation<br/>Email verification logic"]
-            EmailQueueService["EmailQueueService<br/>Queue management<br/>Email job creation"]
-            MetricsService["MetricsService<br/>Performance tracking<br/>Health monitoring & analytics"]
+            SubscriptionService["Subscription Service<br/>processSubscription()<br/>handleSubscriptionInDatabase()"]
+            VerificationService["Verification Service<br/>generateVerificationToken()<br/>verifyVerificationToken()"]
+            EmailQueueService["Email Queue Service<br/>Queue management<br/>Email job creation"]
+            ObservabilityService["Observability Service<br/>WorkerObservability<br/>PerformanceMonitor"]
         end
-        
+
         subgraph ExternalClients["External Integration Clients"]
-            TurnstileClient["TurnstileClient<br/>verifyTurnstile()<br/>Bot protection validation"]
-            DatabaseClient["DatabaseClient<br/>D1 database operations<br/>CRUD operations"]
-            SMTPClient["SMTPClient<br/>sendEmail()<br/>SMTP email delivery"]
+            TurnstileClient["Turnstile Client<br/>verifyTurnstile()<br/>Bot protection validation"]
+            DatabaseClient["Database Client<br/>D1 database operations<br/>SQL queries & transactions"]
+            MetricsHandler["Metrics Handler<br/>MetricsHandler class<br/>Prometheus & JSON metrics"]
         end
     end
-    
+
+    subgraph EmailWorkerComponents["Email Verification Worker Components"]
+        EmailProcessor["Email Processor<br/>processVerificationEmail()<br/>Queue message handler"]
+        EmailGenerator["Email Generator<br/>generateVerificationEmail()<br/>HTML & text templates"]
+        MailChannelsClient["MailChannels Client<br/>sendVerificationEmail()<br/>API integration"]
+    end
+
     %% Component relationships
-    WebForm -->|"POST request"| SubscribeHandler
-    VerificationEmail -->|"User clicks verification link"| VerifyHandler
-    NewsletterEmail -->|"User clicks unsubscribe link"| UnsubscribeHandler
-    Grafana -->|"GET /metrics (authenticated)"| MetricsHandler
-    
-    SubscribeHandler --> SubscriptionService
-    SubscribeHandler --> TurnstileClient
-    SubscribeHandler -->|"302 Redirect"| NewsletterNext
-    VerifyHandler --> VerificationService
-    UnsubscribeHandler --> VerificationService
-    MetricsHandler --> MetricsService
-    
-    SubscriptionService --> DatabaseClient
-    SubscriptionService --> EmailQueueService
-    VerificationService --> DatabaseClient
-    MetricsService --> DatabaseClient
-    
-    TurnstileClient --> CFTurnstile
-    DatabaseClient --> D1DB
-    EmailQueueService --> EmailQueue
-    
-    EmailQueue --> EmailWorker
-    EmailWorker --> SMTPClient
-    SMTPClient --> SMTPService
-    SMTPService --> VerificationEmail
-    SMTPService --> NewsletterEmail
+    WebForm -->|POST /v1/newsletter/subscribe| SubscribeHandler
+    VerificationEmail -->|User clicks verification link| VerifyHandler
+    UnsubscribeEmail -->|User clicks unsubscribe link| UnsubscribeHandler
+    Grafana -->|GET /metrics authenticated| MetricsHandler
+    Grafana -->|GET /health monitoring| HealthHandler
+    NewsletterSender -->|Fetches subscriber data| DatabaseClient
+
+    SubscribeHandler -->|Processes subscription| SubscriptionService
+    SubscribeHandler -->|Validates bot protection| TurnstileClient
+    SubscribeHandler -->|Records metrics| ObservabilityService
+    VerifyHandler -->|Validates token| VerificationService
+    VerifyHandler -->|Updates database| DatabaseClient
+    UnsubscribeHandler -->|Updates database| DatabaseClient
+    HealthHandler -->|Checks database| DatabaseClient
+
+    SubscriptionService -->|Stores subscriber| DatabaseClient
+    SubscriptionService -->|Queues email| EmailQueueService
+    VerificationService -->|Queries database| DatabaseClient
+    MetricsHandler -->|Queries metrics| DatabaseClient
+
+    TurnstileClient -->|API call| CFTurnstile
+    DatabaseClient -->|SQL operations| D1DB
+    EmailQueueService -->|Sends message| EmailQueue
+
+    EmailQueue -->|Triggers processing| EmailProcessor
+    EmailProcessor -->|Generates content| EmailGenerator
+    EmailProcessor -->|Sends email| MailChannelsClient
+    MailChannelsClient -->|API call| MailChannels
+    MailChannels -->|Delivers email| VerificationEmail
 
     %% Legend
     subgraph Legend["Legend - Components"]
@@ -71,18 +79,18 @@ graph TB
     end
 
     %% Styling
-    classDef handlerFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
-    classDef serviceFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef clientFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+    classDef handlerFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef serviceFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef clientFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px,color:#000
 
-    class SubscribeHandler,VerifyHandler,MetricsHandler,UnsubscribeHandler handlerFlow
-    class SubscriptionService,VerificationService,EmailQueueService,MetricsService serviceFlow
-    class TurnstileClient,DatabaseClient,SMTPClient clientFlow
-    class WebForm,NewsletterNext,VerificationEmail,NewsletterEmail,Grafana,EmailWorker,D1DB,EmailQueue,CFTurnstile,SMTPService externalFlow
+    class SubscribeHandler,VerifyHandler,UnsubscribeHandler,HealthHandler handlerFlow
+    class SubscriptionService,VerificationService,EmailQueueService,ObservabilityService serviceFlow
+    class TurnstileClient,DatabaseClient,MetricsHandler,EmailProcessor,EmailGenerator,MailChannelsClient clientFlow
+    class WebForm,VerificationEmail,UnsubscribeEmail,Grafana,D1DB,EmailQueue,CFTurnstile,MailChannels,NewsletterSender externalFlow
     class Legend,LegendHandler,LegendService,LegendClient,LegendExternal legendBox
-    
+
     %% Apply legend colors
     class LegendHandler handlerFlow
     class LegendService serviceFlow

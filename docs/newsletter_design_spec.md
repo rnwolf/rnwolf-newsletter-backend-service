@@ -34,18 +34,24 @@ It consists of four levels:
 graph TB
     %% C4 Model - Level 1: System Context
     User["Website Visitor<br/>Subscribes to newsletter"]
-    EmailClient["Email Client<br/>Receives verification emails"]
+    EmailClient["Email Client<br/>Receives verification emails<br/>Receives newsletter emails"]
     CFTurnstile["Cloudflare Turnstile<br/>Bot protection service"]
-    SMTPService["SMTP Service<br/>Gmail SMTP / SendGrid / Mailgun<br/>Email delivery provider"]
-    NewsletterSystem["Newsletter Subscription System<br/>Handles double opt-in verification"]
+    MailChannels["MailChannels API<br/>Email delivery service"]
+    NewsletterSystem["Newsletter Subscription System<br/>Handles double opt-in verification<br/>& unsubscribe management"]
+    Grafana["Grafana Dashboard<br/>Monitoring & Analytics"]
+    NewsletterSender["Newsletter Sender<br/>Monthly newsletter distribution"]
 
     %% System Context relationships
-    User -.->|"1. Submits subscription form"| NewsletterSystem
-    NewsletterSystem -.->|"2. Validates with Turnstile"| CFTurnstile
-    CFTurnstile -.->|"3. Returns validation result"| NewsletterSystem
-    NewsletterSystem -.->|"4. Sends email via SMTP"| SMTPService
-    SMTPService -.->|"5. Delivers verification email"| EmailClient
-    EmailClient -.->|"6. User clicks verification link"| NewsletterSystem
+    User -.->|1- Submits subscription form| NewsletterSystem
+    NewsletterSystem -.->|2- Validates with Turnstile| CFTurnstile
+    CFTurnstile -.->|3- Returns validation result| NewsletterSystem
+    NewsletterSystem -.->|4- Sends email via API| MailChannels
+    MailChannels -.->|5- Delivers verification email| EmailClient
+    EmailClient -.->|6- User clicks verification link| NewsletterSystem
+    Grafana -.->|7- Fetches metrics| NewsletterSystem
+    NewsletterSender -.->|8- Fetches subscriber list| NewsletterSystem
+    NewsletterSender -.->|9- Sends newsletter email| EmailClient
+    EmailClient -.->|10- User clicks unsubscribe link| NewsletterSystem
 
     %% Legend
     subgraph Legend["Legend - System Context"]
@@ -55,13 +61,13 @@ graph TB
     end
 
     %% Styling
-    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:3px
-    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:3px
-    classDef systemFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px
-    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:3px,color:#000
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:3px,color:#000
+    classDef systemFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px,color:#000
+    classDef legendBox fill:#f5f5f5,stroke:#000,stroke-width:1px,color:#000
 
     class User,EmailClient userFlow
-    class CFTurnstile,SMTPService externalFlow
+    class CFTurnstile,MailChannels,Grafana,NewsletterSender externalFlow
     class NewsletterSystem systemFlow
     class Legend,LegendUser,LegendExternal,LegendSystem legendBox
 
@@ -79,39 +85,45 @@ graph TB
     User["Website Visitor"]
     EmailClient["Email Client"]
     CFTurnstile["Cloudflare Turnstile"]
-    SMTPService["SMTP Service<br/>Gmail SMTP / SendGrid / Mailgun"]
+    MailChannels["MailChannels API - Email delivery service"]
+    Grafana["Grafana Dashboard - Monitoring & Analytics"]
+    NewsletterSender["Newsletter Sender Script - Python script for distribution"]
 
     %% C4 Model - Level 2: Container View
     subgraph NewsletterSystem["Newsletter Subscription System"]
-        subgraph StaticWebsite["Static Website (MkDocs)"]
-            WebForm["Newsletter Form<br/>HTML + JavaScript<br/>newsletter.js"]
-            NewsletterNext["Thank You Page<br/>newsletter_next.html<br/>Confirmation page"]
+        subgraph StaticWebsite["Static Website"]
+            WebForm["Newsletter Form - HTML + JavaScript - Embedded in website"]
         end
 
         subgraph CloudflareWorkers["Cloudflare Workers"]
-            APIWorker["Newsletter API Worker<br/>TypeScript<br/>Handles HTTP requests"]
-            EmailWorker["Email Queue Worker<br/>TypeScript<br/>Processes email queue"]
+            APIWorker["Newsletter API Worker - TypeScript - Main HTTP handler - index.ts"]
+            EmailWorker["Email Verification Worker - TypeScript - Queue consumer - email-verification-worker.ts"]
+            MetricsHandler["Metrics Handler - TypeScript - Observability endpoint - metrics-handler.ts"]
         end
 
         subgraph CloudflareServices["Cloudflare Infrastructure"]
-            D1DB[("D1 Database<br/>SQLite<br/>Subscriber data")]
-            EmailQueue["Email Queue<br/>Cloudflare Queues<br/>Async email jobs"]
+            D1DB[("D1 Database - SQLite - Subscriber data & metrics")]
+            EmailQueue["Email Verification Queue - Cloudflare Queues - Async email processing"]
         end
     end
 
     %% Container relationships
-    User -->|"1. Fills subscription form"| WebForm
-    WebForm -->|"2. POST /v1/newsletter/subscribe"| APIWorker
-    APIWorker -->|"3. Validates with Turnstile"| CFTurnstile
-    APIWorker -->|"4. Stores unverified subscriber"| D1DB
-    APIWorker -->|"5. Queues verification email"| EmailQueue
-    APIWorker -->|"6. Redirects user (302)"| NewsletterNext
-    NewsletterNext -->|"7. User sees thank you message"| User
-    EmailQueue -->|"8. Triggers email processing"| EmailWorker
-    EmailWorker -->|"9. Sends email via SMTP"| SMTPService
-    SMTPService -->|"10. Delivers verification email"| EmailClient
-    EmailClient -->|"11. User clicks verification link"| APIWorker
-    APIWorker -->|"12. Updates verification status"| D1DB
+    User -->|1- Fills subscription form| WebForm
+    WebForm -->|2- POST /v1/newsletter/subscribe| APIWorker
+    APIWorker -->|3- Validates with Turnstile| CFTurnstile
+    APIWorker -->|4- Stores unverified subscriber| D1DB
+    APIWorker -->|5- Queues verification email| EmailQueue
+    APIWorker -->|6- Returns success response| WebForm
+    EmailQueue -->|7- Triggers email processing| EmailWorker
+    EmailWorker -->|8- Sends email via API| MailChannels
+    MailChannels -->|9- Delivers verification email| EmailClient
+    EmailClient -->|10- User clicks verification link| APIWorker
+    APIWorker -->|11- Updates verification status| D1DB
+    EmailClient -->|12- User clicks unsubscribe link| APIWorker
+    APIWorker -->|13- Updates unsubscribe status| D1DB
+    Grafana -->|14- Fetches metrics| MetricsHandler
+    MetricsHandler -->|15- Queries database| D1DB
+    NewsletterSender -->|16- Fetches subscriber list| D1DB
 
     %% Legend
     subgraph Legend["Legend - Containers"]
@@ -122,15 +134,15 @@ graph TB
     end
 
     %% Styling
-    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
-    classDef webFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    classDef workerFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef dataFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef webFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef workerFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef dataFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px,color:#000
 
-    class User,EmailClient,CFTurnstile,SMTPService userFlow
-    class WebForm,NewsletterNext webFlow
-    class APIWorker,EmailWorker workerFlow
+    class User,EmailClient,CFTurnstile,MailChannels,Grafana,NewsletterSender userFlow
+    class WebForm webFlow
+    class APIWorker,EmailWorker,MetricsHandler workerFlow
     class D1DB,EmailQueue dataFlow
     class Legend,LegendUser,LegendWeb,LegendWorker,LegendData legendBox
 
@@ -147,66 +159,74 @@ graph TB
 graph TB
     %% External containers
     WebForm["Newsletter Form"]
-    NewsletterNext["Thank You Page"]
     VerificationEmail["Verification Email<br/>(sent to user)"]
-    NewsletterEmail["Newsletter Email<br/>(monthly newsletter)"]
-    Grafana["Grafana<br/>(Monitoring & Analytics)"]
-    EmailWorker["Email Queue Worker"]
+    UnsubscribeEmail["Unsubscribe Link<br/>(in newsletters)"]
+    Grafana["Grafana Dashboard<br/>(Monitoring & Analytics)"]
     D1DB[("D1 Database")]
-    EmailQueue["Email Queue"]
+    EmailQueue["Email Verification Queue"]
     CFTurnstile["Cloudflare Turnstile"]
-    SMTPService["SMTP Service"]
+    MailChannels["MailChannels API"]
+    NewsletterSender["Newsletter Sender Script"]
 
     %% C4 Model - Level 3: Component View - API Worker
     subgraph APIWorker["Newsletter API Worker"]
         subgraph HTTPHandlers["HTTP Request Handlers"]
-            SubscribeHandler["SubscribeHandler<br/>handleSubscribe()<br/>Processes subscription requests"]
-            VerifyHandler["VerifyHandler<br/>handleVerify()<br/>Processes verification clicks"]
-            MetricsHandler["MetricsHandler<br/>handleMetrics()<br/>Health, metrics & performance for Grafana"]
-            UnsubscribeHandler["UnsubscribeHandler<br/>handleUnsubscribe()<br/>Processes unsubscribe requests"]
+            SubscribeHandler["Subscription Handler<br/>handleSubscriptionRequest()<br/>POST /v1/newsletter/subscribe"]
+            VerifyHandler["Email Verification Handler<br/>handleEmailVerification()<br/>GET /v1/newsletter/verify"]
+            UnsubscribeHandler["Unsubscribe Handler<br/>handleUnsubscribe()<br/>GET /v1/newsletter/unsubscribe"]
+            HealthHandler["Health Check Handler<br/>GET / and /health"]
         end
 
         subgraph BusinessServices["Business Logic Services"]
-            SubscriptionService["SubscriptionService<br/>Subscription business logic<br/>Validation & processing"]
-            VerificationService["VerificationService<br/>Token generation & validation<br/>Email verification logic"]
-            EmailQueueService["EmailQueueService<br/>Queue management<br/>Email job creation"]
-            MetricsService["MetricsService<br/>Performance tracking<br/>Health monitoring & analytics"]
+            SubscriptionService["Subscription Service<br/>processSubscription()<br/>handleSubscriptionInDatabase()"]
+            VerificationService["Verification Service<br/>generateVerificationToken()<br/>verifyVerificationToken()"]
+            EmailQueueService["Email Queue Service<br/>Queue management<br/>Email job creation"]
+            ObservabilityService["Observability Service<br/>WorkerObservability<br/>PerformanceMonitor"]
         end
 
         subgraph ExternalClients["External Integration Clients"]
-            TurnstileClient["TurnstileClient<br/>verifyTurnstile()<br/>Bot protection validation"]
-            DatabaseClient["DatabaseClient<br/>D1 database operations<br/>CRUD operations"]
-            SMTPClient["SMTPClient<br/>sendEmail()<br/>SMTP email delivery"]
+            TurnstileClient["Turnstile Client<br/>verifyTurnstile()<br/>Bot protection validation"]
+            DatabaseClient["Database Client<br/>D1 database operations<br/>SQL queries & transactions"]
+            MetricsHandler["Metrics Handler<br/>MetricsHandler class<br/>Prometheus & JSON metrics"]
         end
     end
 
+    subgraph EmailWorkerComponents["Email Verification Worker Components"]
+        EmailProcessor["Email Processor<br/>processVerificationEmail()<br/>Queue message handler"]
+        EmailGenerator["Email Generator<br/>generateVerificationEmail()<br/>HTML & text templates"]
+        MailChannelsClient["MailChannels Client<br/>sendVerificationEmail()<br/>API integration"]
+    end
+
     %% Component relationships
-    WebForm -->|"POST request"| SubscribeHandler
-    VerificationEmail -->|"User clicks verification link"| VerifyHandler
-    NewsletterEmail -->|"User clicks unsubscribe link"| UnsubscribeHandler
-    Grafana -->|"GET /metrics (authenticated)"| MetricsHandler
+    WebForm -->|POST /v1/newsletter/subscribe| SubscribeHandler
+    VerificationEmail -->|User clicks verification link| VerifyHandler
+    UnsubscribeEmail -->|User clicks unsubscribe link| UnsubscribeHandler
+    Grafana -->|GET /metrics authenticated| MetricsHandler
+    Grafana -->|GET /health monitoring| HealthHandler
+    NewsletterSender -->|Fetches subscriber data| DatabaseClient
 
-    SubscribeHandler --> SubscriptionService
-    SubscribeHandler --> TurnstileClient
-    SubscribeHandler -->|"302 Redirect"| NewsletterNext
-    VerifyHandler --> VerificationService
-    UnsubscribeHandler --> VerificationService
-    MetricsHandler --> MetricsService
+    SubscribeHandler -->|Processes subscription| SubscriptionService
+    SubscribeHandler -->|Validates bot protection| TurnstileClient
+    SubscribeHandler -->|Records metrics| ObservabilityService
+    VerifyHandler -->|Validates token| VerificationService
+    VerifyHandler -->|Updates database| DatabaseClient
+    UnsubscribeHandler -->|Updates database| DatabaseClient
+    HealthHandler -->|Checks database| DatabaseClient
 
-    SubscriptionService --> DatabaseClient
-    SubscriptionService --> EmailQueueService
-    VerificationService --> DatabaseClient
-    MetricsService --> DatabaseClient
+    SubscriptionService -->|Stores subscriber| DatabaseClient
+    SubscriptionService -->|Queues email| EmailQueueService
+    VerificationService -->|Queries database| DatabaseClient
+    MetricsHandler -->|Queries metrics| DatabaseClient
 
-    TurnstileClient --> CFTurnstile
-    DatabaseClient --> D1DB
-    EmailQueueService --> EmailQueue
+    TurnstileClient -->|API call| CFTurnstile
+    DatabaseClient -->|SQL operations| D1DB
+    EmailQueueService -->|Sends message| EmailQueue
 
-    EmailQueue --> EmailWorker
-    EmailWorker --> SMTPClient
-    SMTPClient --> SMTPService
-    SMTPService --> VerificationEmail
-    SMTPService --> NewsletterEmail
+    EmailQueue -->|Triggers processing| EmailProcessor
+    EmailProcessor -->|Generates content| EmailGenerator
+    EmailProcessor -->|Sends email| MailChannelsClient
+    MailChannelsClient -->|API call| MailChannels
+    MailChannels -->|Delivers email| VerificationEmail
 
     %% Legend
     subgraph Legend["Legend - Components"]
@@ -217,16 +237,16 @@ graph TB
     end
 
     %% Styling
-    classDef handlerFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
-    classDef serviceFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef clientFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+    classDef handlerFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef serviceFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef clientFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px,color:#000
 
-    class SubscribeHandler,VerifyHandler,MetricsHandler,UnsubscribeHandler handlerFlow
-    class SubscriptionService,VerificationService,EmailQueueService,MetricsService serviceFlow
-    class TurnstileClient,DatabaseClient,SMTPClient clientFlow
-    class WebForm,NewsletterNext,VerificationEmail,NewsletterEmail,Grafana,EmailWorker,D1DB,EmailQueue,CFTurnstile,SMTPService externalFlow
+    class SubscribeHandler,VerifyHandler,UnsubscribeHandler,HealthHandler handlerFlow
+    class SubscriptionService,VerificationService,EmailQueueService,ObservabilityService serviceFlow
+    class TurnstileClient,DatabaseClient,MetricsHandler,EmailProcessor,EmailGenerator,MailChannelsClient clientFlow
+    class WebForm,VerificationEmail,UnsubscribeEmail,Grafana,D1DB,EmailQueue,CFTurnstile,MailChannels,NewsletterSender externalFlow
     class Legend,LegendHandler,LegendService,LegendClient,LegendExternal legendBox
 
     %% Apply legend colors
@@ -241,76 +261,91 @@ graph TB
 ```mermaid
 graph TB
     %% External Components
-    SubscribeHandler["SubscribeHandler"]
-    VerifyHandler["VerifyHandler"]
-    MetricsHandler["MetricsHandler"]
-    EmailWorker["Email Queue Worker"]
-    SMTPService["SMTP Service"]
-    Grafana["Grafana"]
+    SubscribeHandler["Subscription Handler"]
+    VerifyHandler["Email Verification Handler"]
+    UnsubscribeHandler["Unsubscribe Handler"]
+    MetricsHandler["Metrics Handler"]
+    EmailWorker["Email Verification Worker"]
+    MailChannels["MailChannels API"]
+    Grafana["Grafana Dashboard"]
+    NewsletterSender["Newsletter Sender Script"]
 
-    %% SubscriptionService Methods
-    CreateUnverified["createUnverifiedSubscriber()"]
-    ValidateEmail["validateEmailFormat()"]
-    QueueEmail["queueVerificationEmail()"]
+    %% Core Business Logic Methods
+    ProcessSubscription["processSubscription()"]
+    HandleSubscriptionInDB["handleSubscriptionInDatabase()"]
+    ValidateEmail["isValidEmail()"]
+    NormalizeEmail["normalizeEmail()"]
 
-    %% VerificationService Methods
+    %% Token Management Methods
     GenerateToken["generateVerificationToken()"]
-    ValidateToken["validateVerificationToken()"]
-    MarkVerified["markSubscriberAsVerified()"]
+    VerifyToken["verifyVerificationToken()"]
+    VerifyUnsubscribeToken["verifyUnsubscribeToken()"]
 
-    %% MetricsService Methods
-    GetSubscriberStats["getSubscriberStats()"]
-    GetHealthMetrics["getHealthMetrics()"]
+    %% Metrics & Observability Methods
+    CollectDatabaseMetrics["collectDatabaseMetrics()"]
+    CollectHealthMetrics["collectHealthMetrics()"]
     FormatPrometheus["formatPrometheusMetrics()"]
-    GetPerformanceMetrics["getPerformanceMetrics()"]
+    HandlePrometheusQuery["handlePrometheusQuery()"]
+    RecordMetric["recordMetric()"]
 
     %% Database Operations
     InsertSubscriber["INSERT INTO subscribers"]
-    UpdateVerified["UPDATE SET verified=TRUE"]
-    FindByToken["SELECT WHERE token=?"]
+    UpdateVerified["UPDATE SET email_verified=TRUE"]
+    UpdateUnsubscribed["UPDATE SET unsubscribed_at=?"]
     FindByEmail["SELECT WHERE email=?"]
-    QueryMetrics["SELECT COUNT(*) FROM subscribers"]
+    CountSubscribers["SELECT COUNT(*) FROM subscribers"]
+    CountActive["SELECT COUNT(*) WHERE unsubscribed_at IS NULL"]
 
     %% Email Operations
-    QueueMessage["queue.send()"]
-    ProcessBatch["queue.consume()"]
+    QueueMessage["EMAIL_VERIFICATION_QUEUE.send()"]
+    ProcessBatch["handleEmailVerificationQueue()"]
     HandleRetry["message.retry()"]
-    SendSMTP["smtp.sendMail()"]
-    BuildEmailTemplate["buildVerificationEmail()"]
+    SendMailChannels["sendVerificationEmail()"]
+    GenerateEmailTemplate["generateVerificationEmail()"]
 
     %% Handler to Service Relationships
-    SubscribeHandler --> CreateUnverified
+    SubscribeHandler --> ProcessSubscription
     SubscribeHandler --> ValidateEmail
-    VerifyHandler --> ValidateToken
-    VerifyHandler --> MarkVerified
-    MetricsHandler --> GetSubscriberStats
-    MetricsHandler --> GetHealthMetrics
+    SubscribeHandler --> NormalizeEmail
+    SubscribeHandler --> RecordMetric
+    VerifyHandler --> VerifyToken
+    VerifyHandler --> UpdateVerified
+    VerifyHandler --> RecordMetric
+    UnsubscribeHandler --> VerifyUnsubscribeToken
+    UnsubscribeHandler --> UpdateUnsubscribed
+    UnsubscribeHandler --> RecordMetric
+    MetricsHandler --> CollectDatabaseMetrics
+    MetricsHandler --> CollectHealthMetrics
     MetricsHandler --> FormatPrometheus
-    MetricsHandler --> GetPerformanceMetrics
+    MetricsHandler --> HandlePrometheusQuery
 
     %% Service to Service Relationships
-    CreateUnverified --> GenerateToken
-    CreateUnverified --> QueueEmail
+    ProcessSubscription --> HandleSubscriptionInDB
+    ProcessSubscription --> GenerateToken
+    ProcessSubscription --> QueueMessage
+    ProcessSubscription --> RecordMetric
 
     %% Service to Database Relationships
-    CreateUnverified --> InsertSubscriber
-    ValidateEmail --> FindByEmail
-    ValidateToken --> FindByToken
-    MarkVerified --> UpdateVerified
-    GetSubscriberStats --> QueryMetrics
-    GetHealthMetrics --> QueryMetrics
-    GetPerformanceMetrics --> QueryMetrics
+    HandleSubscriptionInDB --> InsertSubscriber
+    HandleSubscriptionInDB --> FindByEmail
+    UpdateVerified --> FindByEmail
+    UpdateUnsubscribed --> FindByEmail
+    CollectDatabaseMetrics --> CountSubscribers
+    CollectDatabaseMetrics --> CountActive
+    CollectHealthMetrics --> CountSubscribers
 
     %% Email Flow Relationships
-    QueueEmail --> QueueMessage
+    QueueMessage --> EmailWorker
     EmailWorker --> ProcessBatch
-    ProcessBatch --> BuildEmailTemplate
-    BuildEmailTemplate --> SendSMTP
-    SendSMTP --> SMTPService
+    ProcessBatch --> GenerateEmailTemplate
+    ProcessBatch --> SendMailChannels
+    ProcessBatch --> RecordMetric
+    SendMailChannels --> MailChannels
     ProcessBatch --> HandleRetry
 
     %% External System Relationships
     Grafana --> MetricsHandler
+    NewsletterSender --> CountActive
 
     %% Legend
     subgraph Legend["Legend - Code Level"]
@@ -321,23 +356,23 @@ graph TB
     end
 
     %% Styling
-    classDef methodFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
-    classDef databaseFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    classDef queueFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+    classDef methodFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef databaseFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef queueFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef externalFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px,color:#000
 
     %% Apply styling to methods
-    class CreateUnverified,ValidateEmail,QueueEmail,GenerateToken,ValidateToken,MarkVerified,GetSubscriberStats,GetHealthMetrics,FormatPrometheus,GetPerformanceMetrics methodFlow
+    class ProcessSubscription,HandleSubscriptionInDB,ValidateEmail,NormalizeEmail,GenerateToken,VerifyToken,VerifyUnsubscribeToken,CollectDatabaseMetrics,CollectHealthMetrics,FormatPrometheus,HandlePrometheusQuery,RecordMetric methodFlow
 
     %% Apply styling to database operations
-    class InsertSubscriber,UpdateVerified,FindByToken,FindByEmail,QueryMetrics databaseFlow
+    class InsertSubscriber,UpdateVerified,UpdateUnsubscribed,FindByEmail,CountSubscribers,CountActive databaseFlow
 
     %% Apply styling to queue operations
-    class QueueMessage,ProcessBatch,HandleRetry,SendSMTP,BuildEmailTemplate queueFlow
+    class QueueMessage,ProcessBatch,HandleRetry,SendMailChannels,GenerateEmailTemplate queueFlow
 
     %% Apply styling to external components
-    class SubscribeHandler,VerifyHandler,MetricsHandler,EmailWorker,SMTPService,Grafana externalFlow
+    class SubscribeHandler,VerifyHandler,UnsubscribeHandler,MetricsHandler,EmailWorker,MailChannels,Grafana,NewsletterSender externalFlow
 
     %% Apply styling to legend
     class Legend,LegendMethod,LegendDatabase,LegendQueue,LegendExternal legendBox

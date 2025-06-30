@@ -3,39 +3,45 @@ graph TB
     User["Website Visitor"]
     EmailClient["Email Client"]
     CFTurnstile["Cloudflare Turnstile"]
-    SMTPService["SMTP Service<br/>Gmail SMTP / SendGrid / Mailgun"]
+    MailChannels["MailChannels API - Email delivery service"]
+    Grafana["Grafana Dashboard - Monitoring & Analytics"]
+    NewsletterSender["Newsletter Sender Script - Python script for distribution"]
 
     %% C4 Model - Level 2: Container View
     subgraph NewsletterSystem["Newsletter Subscription System"]
-        subgraph StaticWebsite["Static Website (MkDocs)"]
-            WebForm["Newsletter Form<br/>HTML + JavaScript<br/>newsletter.js"]
-            NewsletterNext["Thank You Page<br/>newsletter_next.html<br/>Confirmation page"]
+        subgraph StaticWebsite["Static Website"]
+            WebForm["Newsletter Form - HTML + JavaScript - Embedded in website"]
         end
-        
+
         subgraph CloudflareWorkers["Cloudflare Workers"]
-            APIWorker["Newsletter API Worker<br/>TypeScript<br/>Handles HTTP requests"]
-            EmailWorker["Email Queue Worker<br/>TypeScript<br/>Processes email queue"]
+            APIWorker["Newsletter API Worker - TypeScript - Main HTTP handler - index.ts"]
+            EmailWorker["Email Verification Worker - TypeScript - Queue consumer - email-verification-worker.ts"]
+            MetricsHandler["Metrics Handler - TypeScript - Observability endpoint - metrics-handler.ts"]
         end
-        
+
         subgraph CloudflareServices["Cloudflare Infrastructure"]
-            D1DB[("D1 Database<br/>SQLite<br/>Subscriber data")]
-            EmailQueue["Email Queue<br/>Cloudflare Queues<br/>Async email jobs"]
+            D1DB[("D1 Database - SQLite - Subscriber data & metrics")]
+            EmailQueue["Email Verification Queue - Cloudflare Queues - Async email processing"]
         end
     end
-    
+
     %% Container relationships
-    User -->|"1. Fills subscription form"| WebForm
-    WebForm -->|"2. POST /v1/newsletter/subscribe"| APIWorker
-    APIWorker -->|"3. Validates with Turnstile"| CFTurnstile
-    APIWorker -->|"4. Stores unverified subscriber"| D1DB
-    APIWorker -->|"5. Queues verification email"| EmailQueue
-    APIWorker -->|"6. Redirects user (302)"| NewsletterNext
-    NewsletterNext -->|"7. User sees thank you message"| User
-    EmailQueue -->|"8. Triggers email processing"| EmailWorker
-    EmailWorker -->|"9. Sends email via SMTP"| SMTPService
-    SMTPService -->|"10. Delivers verification email"| EmailClient
-    EmailClient -->|"11. User clicks verification link"| APIWorker
-    APIWorker -->|"12. Updates verification status"| D1DB
+    User -->|1- Fills subscription form| WebForm
+    WebForm -->|2- POST /v1/newsletter/subscribe| APIWorker
+    APIWorker -->|3- Validates with Turnstile| CFTurnstile
+    APIWorker -->|4- Stores unverified subscriber| D1DB
+    APIWorker -->|5- Queues verification email| EmailQueue
+    APIWorker -->|6- Returns success response| WebForm
+    EmailQueue -->|7- Triggers email processing| EmailWorker
+    EmailWorker -->|8- Sends email via API| MailChannels
+    MailChannels -->|9- Delivers verification email| EmailClient
+    EmailClient -->|10- User clicks verification link| APIWorker
+    APIWorker -->|11- Updates verification status| D1DB
+    EmailClient -->|12- User clicks unsubscribe link| APIWorker
+    APIWorker -->|13- Updates unsubscribe status| D1DB
+    Grafana -->|14- Fetches metrics| MetricsHandler
+    MetricsHandler -->|15- Queries database| D1DB
+    NewsletterSender -->|16- Fetches subscriber list| D1DB
 
     %% Legend
     subgraph Legend["Legend - Containers"]
@@ -46,18 +52,18 @@ graph TB
     end
 
     %% Styling
-    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
-    classDef webFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    classDef workerFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef dataFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px
+    classDef userFlow fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef webFlow fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef workerFlow fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef dataFlow fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    classDef legendBox fill:#f5f5f5,stroke:#666,stroke-width:1px,color:#000
 
-    class User,EmailClient,CFTurnstile,SMTPService userFlow
-    class WebForm,NewsletterNext webFlow
-    class APIWorker,EmailWorker workerFlow
+    class User,EmailClient,CFTurnstile,MailChannels,Grafana,NewsletterSender userFlow
+    class WebForm webFlow
+    class APIWorker,EmailWorker,MetricsHandler workerFlow
     class D1DB,EmailQueue dataFlow
     class Legend,LegendUser,LegendWeb,LegendWorker,LegendData legendBox
-    
+
     %% Apply legend colors
     class LegendUser userFlow
     class LegendWeb webFlow
