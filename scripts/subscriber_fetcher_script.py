@@ -22,6 +22,10 @@ import sys
 CLOUDFLARE_ACCOUNT_ID = os.getenv('CLOUDFLARE_ACCOUNT_ID')
 CLOUDFLARE_API_TOKEN = os.getenv('CLOUDFLARE_API_TOKEN')  # With D1:read permissions
 D1_DATABASE_ID = os.getenv('D1_DATABASE_ID')
+ENVIRONMENT = os.getenv('ENVIRONMENT')
+
+# Valid environments
+VALID_ENVIRONMENTS = ['local', 'staging', 'production']
 
 def query_d1_database(sql_query):
     """Execute SQL query against Cloudflare D1 database"""
@@ -48,12 +52,13 @@ def query_d1_database(sql_query):
         raise
 
 def get_active_subscribers():
-    """Retrieve all active subscribers (those with subscribed_at but no unsubscribed_at)"""
+    """Retrieve all active verified subscribers (those with subscribed_at, no unsubscribed_at, and email_verified = TRUE)"""
     query = """
-    SELECT email, subscribed_at, ip_address, country
+    SELECT email, subscribed_at, ip_address, country, email_verified, verified_at
     FROM subscribers
     WHERE subscribed_at IS NOT NULL
       AND unsubscribed_at IS NULL
+      AND email_verified = TRUE
     ORDER BY subscribed_at DESC
     """
     return query_d1_database(query)
@@ -120,8 +125,8 @@ def save_subscribers_to_file(filename="subscribers.csv"):
         return False
 
 def verify_environment():
-    """Verify all required environment variables are set"""
-    required_vars = ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN', 'D1_DATABASE_ID']
+    """Verify all required environment variables are set and ENVIRONMENT is valid"""
+    required_vars = ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN', 'D1_DATABASE_ID', 'ENVIRONMENT']
     missing_vars = [var for var in required_vars if not os.getenv(var)]
 
     if missing_vars:
@@ -129,6 +134,12 @@ def verify_environment():
         for var in missing_vars:
             print(f"  {var}")
         print("\nPlease set these variables in your .env file or environment")
+        return False
+
+    # Validate ENVIRONMENT value
+    if ENVIRONMENT not in VALID_ENVIRONMENTS:
+        print(f"Invalid ENVIRONMENT value: '{ENVIRONMENT}'")
+        print(f"ENVIRONMENT must be one of: {', '.join(VALID_ENVIRONMENTS)}")
         return False
 
     return True
@@ -159,12 +170,19 @@ def main():
     if not verify_environment():
         sys.exit(1)
 
+    # Display environment information
+    print(f"\n📍 Environment: {ENVIRONMENT}")
+    print(f"Subscriber data will be retrieved from the {ENVIRONMENT} environment")
+
     # Test database connection first
     if not test_connection():
         sys.exit(1)
 
-    # Get command line arguments
-    output_file = sys.argv[1] if len(sys.argv) > 1 else "subscribers.csv"
+    # Generate environment-specific filename
+    default_filename = f"subscribers-{ENVIRONMENT}.csv"
+    output_file = sys.argv[1] if len(sys.argv) > 1 else default_filename
+
+    print(f"\n📁 Output file: {output_file}")
 
     # Fetch and save subscribers
     if save_subscribers_to_file(output_file):
