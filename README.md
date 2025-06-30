@@ -21,29 +21,57 @@ I have setup a cloudflare worker to create CSP record for scripts. That is all w
 I want to create a page and another cloudflare worker to allow users to signup for newsletter.  Can you help create a Design-Specification-Document for this newsletter subscription service. Please ask me questions one at a time to help crate this specification.
 ```
 
-### Key solution documents
+### Implementation Status
 
-After numerous questions, answers and further clarifications we ended up with the following key documents:
+**Status**: ✅ **COMPLETED** - The newsletter subscription service is fully implemented and operational in production.
+
+### Current Documentation
+
+The project documentation has been organized into current and historical sections:
+
+#### **Core Documentation** (Current)
 
 | Document Name                      | Purpose                                                 |
 |------------------------------------|---------------------------------------------------------|
-| newsletter_design_spec.md          | Design Specification Document |
-| newsletter_backend_deployment.md   | Repository Setup & Deployment Guide |
-| newsletter_sdlc_pipeline.md        | SDLC for the newsletter service, from local development through to production |
-| newsletter_implementation_tasks.md | Implementation Task List |
+| [Architecture Overview](docs/architecture-overview.md) | System architecture with C4 model diagrams |
+| [Design Specification](docs/newsletter_design_spec.md) | Complete system design and requirements |
+| [Implementation Status](docs/newsletter_implementation_status.md) | Final implementation status and completion summary |
+| [Testing Guide](docs/testing-guide.md) | Comprehensive testing strategy and procedures |
+| [Deployment Guide](docs/newsletter_backend_deployment.md) | Deployment and operational procedures |
+| [Grafana Observability](docs/grafana_metrics_observability.md) | Monitoring and dashboard configuration |
 
-Software Development Life Cycle = SDLC
+#### **Historical Documentation** (Archived)
 
-The above documents are then used as context to create a detailed task list with code and instructions to implement each of the **implementation tasks**.
+Development process documents have been moved to `docs/archive/` including:
+- TDD implementation guides
+- Interim analysis reports  
+- Implementation notes and working documents
 
-### Implementation Details for each task
+See [docs/archive/README.md](docs/archive/README.md) for details on archived documentation.
 
-| Document Name                     | Purpose                                                       |
-|-----------------------------------|---------------------------------------------------------------|
-| newsletter_subscription_tdd.md    | Task 2.1: Newsletter Subscription Worker - TDD Implementation |
-| unsubscribe_worker_tdd.md         | Task 2.2: Unsubscribe Worker - TDD Implementation             |
+### Quick Start
 
-The alignment between the first document above and the actual implementation got a bit fuzzy as I had ongoing conversations with Claude.ai as I worked on implementing the code. I asked questions about the work as we progressed and then claude.ai and I made suggestion about what to do next as we progressed.
+The newsletter service is deployed and operational:
+
+- **Production API**: `https://api.rnwolf.net`
+- **Staging API**: `https://api-staging.rnwolf.net`
+- **Health Check**: `GET /health`
+- **Subscription**: `POST /v1/newsletter/subscribe`
+
+For development setup, testing, and deployment procedures, see the [Testing Guide](docs/testing-guide.md) and [Deployment Guide](docs/newsletter_backend_deployment.md).
+
+### System Architecture
+
+The system uses Cloudflare Workers with:
+- **D1 Database**: Subscriber data storage
+- **Queues**: Async email processing  
+- **MailChannels**: Email delivery
+- **Turnstile**: Bot protection
+- **Grafana**: Monitoring and observability
+
+See [Architecture Overview](docs/architecture-overview.md) for detailed system design and C4 model diagrams.
+
+## Development Process Notes
 
 Second time round to generate the 2nd document I used the following prompt which ran for 20min.
 
